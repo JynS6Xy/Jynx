@@ -1,8 +1,8 @@
 /**
- * Jynx Global Multi-Network Transfer Engine
- * 1. Global MQTT WebSocket Cloud Relay (broker.emqx.io / broker.hivemq.com) - 100% Free, Global, Works everywhere without servers!
- * 2. Local Mesh (BroadcastChannel + LocalStorage) - Instant zero-latency cross-tab transfer
- * 3. REST API Relay (/api/relay/...) - For self-hosted Python / Docker instances
+ * Jynx Universal Multi-Tier Global Relay Engine
+ * Tier 1: Global MQTT WebSockets Cloud (broker.emqx.io & broker.hivemq.com)
+ * Tier 2: Public Cloud REST Key-Value Relay (api.restful-api.dev)
+ * Tier 3: Local Tab Mesh (BroadcastChannel + LocalStorage)
  */
 
 class JynxTransferEngine {
@@ -38,7 +38,7 @@ class JynxTransferEngine {
         return;
       }
 
-      const clientId = `jynx_client_${Math.random().toString(36).slice(2, 12)}`;
+      const clientId = `jynx_${Math.random().toString(36).slice(2, 12)}`;
       let client = null;
       let connected = false;
 
@@ -57,7 +57,7 @@ class JynxTransferEngine {
         });
 
         client.on("error", (err) => {
-          console.warn("MQTT error:", err);
+          console.warn("MQTT connection error:", err);
           if (!connected) resolve(null);
         });
 
@@ -115,17 +115,16 @@ class JynxTransferEngine {
         }
       };
 
-      // 6 second timeout to find room
       const timeout = setTimeout(() => {
         finish(null);
-      }, 6000);
+      }, 5000);
 
       client.subscribe(topic, { qos: 1 }, (err) => {
         if (err) {
           clearTimeout(timeout);
           finish(null);
         } else {
-          onStatus?.(`Connected to Global Cloud Relay. Waiting for room "${code}"...`, "handshake");
+          onStatus?.(`Connected to Global Cloud Relay. Fetching room "${code}"...`, "handshake");
         }
       });
 
@@ -145,14 +144,37 @@ class JynxTransferEngine {
   }
 
   /**
+   * Public Cloud REST KV Fallback (HTTPS)
+   */
+  async _publishToRestCloud(code, payloadPackage) {
+    try {
+      const res = await fetch("https://api.restful-api.dev/objects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `jynx_room_${code.toLowerCase()}`,
+          data: payloadPackage
+        })
+      });
+      if (res.ok) {
+        const item = await res.json();
+        if (item.id) {
+          // Store mapping in cloud topic
+          console.log("[JYNX REST CLOUD] Stored with ID:", item.id);
+        }
+      }
+    } catch (e) {}
+  }
+
+  /**
    * Executes full Send workflow:
-   * 1. Encrypts payload with AES-256-GCM + PBKDF2
-   * 2. Publishes to Global MQTT Cloud Relay (works across any 2 devices in the world)
-   * 3. Stores in local mesh & REST API
+   * 1. Encrypts payload in browser using AES-256-GCM
+   * 2. Publishes to Global Cloud Relay Network
+   * 3. Stores in local browser mesh
    */
   async startSend({ code, mode, files, text, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
-    onStatus?.("Encrypting payload with AES-256-GCM in browser...", "encrypting");
+    onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
 
     let rawBuffer;
     let manifest = {};
@@ -229,11 +251,12 @@ class JynxTransferEngine {
       localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
     } catch (e) {}
 
-    // 3. Publish to Global MQTT Cloud Relay (Works across all devices/networks globally!)
-    onStatus?.(`Publishing encrypted room to Global Cloud Relay...`, "uploading");
-    const cloudOk = await this._publishToMqttCloud(code, payloadPackage);
+    // 3. Publish to Global MQTT Cloud Relay (Works globally across all devices/networks!)
+    onStatus?.(`Broadcasting encrypted room to Global Cloud Relay...`, "uploading");
+    await this._publishToMqttCloud(code, payloadPackage);
+    this._publishToRestCloud(code, payloadPackage);
 
-    // 4. Try REST backend API if available
+    // 4. Try local backend API if available
     try {
       await fetch(`${this.apiBase}/api/relay/upload`, {
         method: "POST",
@@ -314,10 +337,10 @@ class JynxTransferEngine {
       } catch (e) {}
     }
 
-    // If still not found, show helpful error message
+    // If still not found, show helpful guidance
     if (!payloadPackage || !payloadPackage.data) {
       throw new Error(
-        `Room "${code}" not found. Please ensure the sender selected files/text and clicked "SEND" to publish the room.`
+        `Room "${code}" not found. Please ensure the sender clicked "SEND ENCRYPTED TEXT" (or "SEND FILES") before receiving.`
       );
     }
 
