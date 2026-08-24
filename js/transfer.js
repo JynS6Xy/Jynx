@@ -1,8 +1,8 @@
 /**
  * Jynx Universal Multi-Tier Global Relay Engine
- * Tier 1: Global MQTT WebSockets Cloud (broker.emqx.io & broker.hivemq.com)
- * Tier 2: Public Cloud REST Key-Value Relay (api.restful-api.dev)
- * Tier 3: Local Tab Mesh (BroadcastChannel + LocalStorage)
+ * 1. Vercel Serverless REST API (/api/relay/upload, /api/relay/room/:code, /api/relay/payload/:code)
+ * 2. Global MQTT WebSockets Cloud Relay (broker.emqx.io & broker.hivemq.com)
+ * 3. Local Mesh (BroadcastChannel + LocalStorage)
  */
 
 class JynxTransferEngine {
@@ -27,13 +27,9 @@ class JynxTransferEngine {
     };
   }
 
-  /**
-   * Connects to global MQTT WebSocket broker
-   */
   _getMqttClient() {
     return new Promise((resolve) => {
       if (typeof mqtt === "undefined") {
-        console.warn("MQTT library not loaded");
         resolve(null);
         return;
       }
@@ -56,8 +52,7 @@ class JynxTransferEngine {
           resolve(client);
         });
 
-        client.on("error", (err) => {
-          console.warn("MQTT connection error:", err);
+        client.on("error", () => {
           if (!connected) resolve(null);
         });
 
@@ -73,9 +68,6 @@ class JynxTransferEngine {
     });
   }
 
-  /**
-   * Publishes encrypted container to global cloud MQTT topic with retain: true
-   */
   async _publishToMqttCloud(code, payloadPackage) {
     const topic = `jynx/relay/v1/${code.toLowerCase()}`;
     const client = await this._getMqttClient();
@@ -85,21 +77,12 @@ class JynxTransferEngine {
       const payloadStr = JSON.stringify(payloadPackage);
       client.publish(topic, payloadStr, { qos: 1, retain: true }, (err) => {
         try { client.end(); } catch (e) {}
-        if (err) {
-          console.warn("MQTT publish error:", err);
-          resolve(false);
-        } else {
-          console.log("[JYNX CLOUD RELAY] Published to global topic:", topic);
-          resolve(true);
-        }
+        resolve(!err);
       });
     });
   }
 
-  /**
-   * Fetches encrypted container from global cloud MQTT topic
-   */
-  async _fetchFromMqttCloud(code, onStatus) {
+  async _fetchFromMqttCloud(code) {
     const topic = `jynx/relay/v1/${code.toLowerCase()}`;
     const client = await this._getMqttClient();
     if (!client) return null;
@@ -117,14 +100,12 @@ class JynxTransferEngine {
 
       const timeout = setTimeout(() => {
         finish(null);
-      }, 5000);
+      }, 4000);
 
       client.subscribe(topic, { qos: 1 }, (err) => {
         if (err) {
           clearTimeout(timeout);
           finish(null);
-        } else {
-          onStatus?.(`Connected to Global Cloud Relay. Fetching room "${code}"...`, "handshake");
         }
       });
 
@@ -143,35 +124,6 @@ class JynxTransferEngine {
     });
   }
 
-  /**
-   * Public Cloud REST KV Fallback (HTTPS)
-   */
-  async _publishToRestCloud(code, payloadPackage) {
-    try {
-      const res = await fetch("https://api.restful-api.dev/objects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `jynx_room_${code.toLowerCase()}`,
-          data: payloadPackage
-        })
-      });
-      if (res.ok) {
-        const item = await res.json();
-        if (item.id) {
-          // Store mapping in cloud topic
-          console.log("[JYNX REST CLOUD] Stored with ID:", item.id);
-        }
-      }
-    } catch (e) {}
-  }
-
-  /**
-   * Executes full Send workflow:
-   * 1. Encrypts payload in browser using AES-256-GCM
-   * 2. Publishes to Global Cloud Relay Network
-   * 3. Stores in local browser mesh
-   */
   async startSend({ code, mode, files, text, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
     onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
@@ -251,14 +203,12 @@ class JynxTransferEngine {
       localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
     } catch (e) {}
 
-    // 3. Publish to Global MQTT Cloud Relay (Works globally across all devices/networks!)
-    onStatus?.(`Broadcasting encrypted room to Global Cloud Relay...`, "uploading");
-    await this._publishToMqttCloud(code, payloadPackage);
-    this._publishToRestCloud(code, payloadPackage);
+    onStatus?.("Staging encrypted payload to Cloud Relay...", "uploading");
 
-    // 4. Try local backend API if available
+    // 3. Upload to Vercel Serverless Relay
+    let serverlessOk = false;
     try {
-      await fetch(`${this.apiBase}/api/relay/upload`, {
+      const res = await fetch(`${this.apiBase}/api/relay/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -271,7 +221,14 @@ class JynxTransferEngine {
           max_downloads: 10
         })
       });
+      if (res.ok) {
+        serverlessOk = true;
+        console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
+      }
     } catch (e) {}
+
+    // 4. Publish to Global MQTT Cloud Relay
+    await this._publishToMqttCloud(code, payloadPackage);
 
     // 5. Broadcast to local tabs
     if (this.channel) {
@@ -282,7 +239,7 @@ class JynxTransferEngine {
       });
     }
 
-    onStatus?.(`Ready on Global Relay! Share code "${code}" (PAKE: ${verification})`, "ready");
+    onStatus?.(`Ready on Global Relay! Share code: ${code} (Verification: ${verification})`, "ready");
 
     return {
       manifest,
@@ -292,34 +249,27 @@ class JynxTransferEngine {
     };
   }
 
-  /**
-   * Executes full Receive workflow:
-   * 1. Checks Local Mesh (Instant if on same machine)
-   * 2. Checks Global MQTT Cloud Relay (Works across any 2 devices globally!)
-   * 3. Checks REST API Relay
-   */
   async startReceive({ code, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
-    onStatus?.(`Searching for room "${code}" on Global Jynx Relay...`, "connecting");
+    onStatus?.(`Connecting to Global Jynx Relay for room "${code}"...`, "connecting");
 
     let payloadPackage = null;
+    const maxAttempts = 15; // Poll for up to 30 seconds if sender is still uploading
+    let attempt = 0;
 
-    // Strategy 1: Check Local Storage / Session Mesh (Instant)
-    try {
-      const stored = sessionStorage.getItem(`jynx_payload_${code}`) || localStorage.getItem(`jynx_payload_${code}`);
-      if (stored) {
-        payloadPackage = JSON.parse(stored);
-      }
-    } catch (e) {}
+    while (attempt < maxAttempts && !payloadPackage) {
+      attempt++;
 
-    // Strategy 2: Check Global MQTT Cloud Relay (Cross-Device Global Network)
-    if (!payloadPackage) {
-      onStatus?.(`Connecting to Global Cloud Relay for room "${code}"...`, "handshake");
-      payloadPackage = await this._fetchFromMqttCloud(code, onStatus);
-    }
+      // Strategy 1: Local Session Mesh (Instant)
+      try {
+        const stored = sessionStorage.getItem(`jynx_payload_${code}`) || localStorage.getItem(`jynx_payload_${code}`);
+        if (stored) {
+          payloadPackage = JSON.parse(stored);
+          break;
+        }
+      } catch (e) {}
 
-    // Strategy 3: Check REST API Backend
-    if (!payloadPackage) {
+      // Strategy 2: Vercel Serverless REST API
       try {
         const roomRes = await fetch(`${this.apiBase}/api/relay/room/${encodeURIComponent(code)}`);
         if (roomRes.ok) {
@@ -332,15 +282,26 @@ class JynxTransferEngine {
               manifest: roomMeta.manifest,
               verification: roomMeta.verification
             };
+            break;
           }
         }
       } catch (e) {}
+
+      // Strategy 3: Global MQTT Cloud Relay
+      if (!payloadPackage) {
+        payloadPackage = await this._fetchFromMqttCloud(code);
+        if (payloadPackage) break;
+      }
+
+      if (!payloadPackage && attempt < maxAttempts) {
+        onStatus?.(`Searching for sender room "${code}" on relay... (Attempt ${attempt}/${maxAttempts})`, "handshake");
+        await new Promise(r => setTimeout(r, 1800));
+      }
     }
 
-    // If still not found, show helpful guidance
     if (!payloadPackage || !payloadPackage.data) {
       throw new Error(
-        `Room "${code}" not found. Please ensure the sender clicked "SEND ENCRYPTED TEXT" (or "SEND FILES") before receiving.`
+        `Room "${code}" not found. Please ensure the sender clicked "SEND ENCRYPTED TEXT" or "SEND FILES" to open the transfer room.`
       );
     }
 
@@ -363,11 +324,11 @@ class JynxTransferEngine {
       const eta = speed > 0 ? remainingBytes / speed : 0;
 
       onProgress?.({ transferred, totalBytes, percent, speed, eta, elapsedSec });
-      await new Promise(r => setTimeout(r, 25));
+      await new Promise(r => setTimeout(r, 20));
     }
 
     onStatus?.("Decrypting AES-256-GCM payload in browser...", "decrypting");
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 100));
 
     let decryptedBuffer;
     try {
