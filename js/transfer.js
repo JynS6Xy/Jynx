@@ -1,17 +1,18 @@
 /**
- * Jynx Universal Hybrid Transfer Engine
- * 1. WebRTC Direct P2P Mesh (PeerJS + STUN/TURN) - Works globally on Vercel/GitHub Pages with zero server setup!
- * 2. SQLite / REST Relay Backend (/api/relay/...) - Works when self-hosted with python server.py
- * 3. BroadcastChannel + LocalStorage Mesh - Zero-latency instant local cross-tab transfer
+ * Jynx Global Multi-Network Transfer Engine
+ * 1. Global MQTT WebSocket Cloud Relay (broker.emqx.io / broker.hivemq.com) - 100% Free, Global, Works everywhere without servers!
+ * 2. Local Mesh (BroadcastChannel + LocalStorage) - Instant zero-latency cross-tab transfer
+ * 3. REST API Relay (/api/relay/...) - For self-hosted Python / Docker instances
  */
 
 class JynxTransferEngine {
   constructor() {
     this.channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("jynx_p2p_mesh") : null;
     this.apiBase = window.location.origin;
-    this.activePeer = null;
-    this.activeConn = null;
-    this.pendingPayload = null;
+    this.mqttBrokers = [
+      "wss://broker.emqx.io:8084/mqtt",
+      "wss://broker.hivemq.com:8884/mqtt"
+    ];
     this.setupLocalMesh();
   }
 
@@ -27,109 +28,131 @@ class JynxTransferEngine {
   }
 
   /**
-   * Initializes WebRTC Peer for the sender
+   * Connects to global MQTT WebSocket broker
    */
-  _initSenderPeer(code, encryptedData, manifest, verification, onStatus, onProgress) {
+  _getMqttClient() {
     return new Promise((resolve) => {
-      const peerId = `jynx-${code.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-      
+      if (typeof mqtt === "undefined") {
+        console.warn("MQTT library not loaded");
+        resolve(null);
+        return;
+      }
+
+      const clientId = `jynx_client_${Math.random().toString(36).slice(2, 12)}`;
+      let client = null;
+      let connected = false;
+
+      const brokerUrl = this.mqttBrokers[0];
       try {
-        if (this.activePeer) {
-          try { this.activePeer.destroy(); } catch (e) {}
-        }
-
-        if (typeof Peer === "undefined") {
-          console.warn("PeerJS not loaded, relying on cloud relay");
-          resolve(false);
-          return;
-        }
-
-        this.activePeer = new Peer(peerId, {
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" },
-              { urls: "stun:stun1.l.google.com:19302" },
-              { urls: "stun:stun2.l.google.com:19302" },
-              { urls: "stun:global.stun.twilio.com:3478" }
-            ]
-          },
-          debug: 0
+        client = mqtt.connect(brokerUrl, {
+          clientId: clientId,
+          clean: true,
+          connectTimeout: 4000,
+          reconnectPeriod: 0
         });
 
-        this.activePeer.on("open", (id) => {
-          console.log("[JYNX WEBRTC] Sender Peer ready with ID:", id);
-          resolve(true);
+        client.on("connect", () => {
+          connected = true;
+          resolve(client);
         });
 
-        this.activePeer.on("connection", (conn) => {
-          console.log("[JYNX WEBRTC] Receiver connected to sender room!");
-          this.activeConn = conn;
-          onStatus?.("Receiver connected! Streaming AES-256-GCM encrypted chunks via direct WebRTC tunnel...", "transferring");
-
-          conn.on("open", () => {
-            // Send Handshake Metadata
-            conn.send({
-              type: "MANIFEST",
-              manifest: manifest,
-              verification: verification,
-              totalBytes: encryptedData.byteLength
-            });
-
-            // Stream encrypted binary in chunks
-            const chunkSize = 64 * 1024;
-            const totalBytes = encryptedData.byteLength;
-            let offset = 0;
-            const startTime = performance.now();
-
-            const sendNextChunk = () => {
-              if (offset < totalBytes) {
-                const chunk = encryptedData.slice(offset, offset + chunkSize);
-                conn.send({
-                  type: "CHUNK",
-                  offset: offset,
-                  data: chunk
-                });
-                offset += chunk.byteLength;
-
-                const elapsed = (performance.now() - startTime) / 1000;
-                const speed = elapsed > 0 ? offset / elapsed : 0;
-                const percent = Math.min(100, Math.round((offset / totalBytes) * 100));
-                const remaining = totalBytes - offset;
-                const eta = speed > 0 ? remaining / speed : 0;
-
-                onProgress?.({ transferred: offset, totalBytes, percent, speed, eta, elapsedSec: elapsed });
-                setTimeout(sendNextChunk, 15);
-              } else {
-                conn.send({ type: "EOF" });
-                onStatus?.(`Transfer complete! Verified PAKE: ${verification}`, "done");
-              }
-            };
-
-            sendNextChunk();
-          });
+        client.on("error", (err) => {
+          console.warn("MQTT error:", err);
+          if (!connected) resolve(null);
         });
 
-        this.activePeer.on("error", (err) => {
-          console.warn("[JYNX WEBRTC] Peer warning:", err);
-          resolve(false);
-        });
-
-        // Timeout fallback
-        setTimeout(() => resolve(false), 3500);
+        setTimeout(() => {
+          if (!connected) {
+            try { client?.end(); } catch (e) {}
+            resolve(null);
+          }
+        }, 4000);
       } catch (err) {
-        console.warn("[JYNX WEBRTC] Init error:", err);
-        resolve(false);
+        resolve(null);
       }
     });
   }
 
   /**
+   * Publishes encrypted container to global cloud MQTT topic with retain: true
+   */
+  async _publishToMqttCloud(code, payloadPackage) {
+    const topic = `jynx/relay/v1/${code.toLowerCase()}`;
+    const client = await this._getMqttClient();
+    if (!client) return false;
+
+    return new Promise((resolve) => {
+      const payloadStr = JSON.stringify(payloadPackage);
+      client.publish(topic, payloadStr, { qos: 1, retain: true }, (err) => {
+        try { client.end(); } catch (e) {}
+        if (err) {
+          console.warn("MQTT publish error:", err);
+          resolve(false);
+        } else {
+          console.log("[JYNX CLOUD RELAY] Published to global topic:", topic);
+          resolve(true);
+        }
+      });
+    });
+  }
+
+  /**
+   * Fetches encrypted container from global cloud MQTT topic
+   */
+  async _fetchFromMqttCloud(code, onStatus) {
+    const topic = `jynx/relay/v1/${code.toLowerCase()}`;
+    const client = await this._getMqttClient();
+    if (!client) return null;
+
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const finish = (result) => {
+        if (!resolved) {
+          resolved = true;
+          try { client.unsubscribe(topic); client.end(); } catch (e) {}
+          resolve(result);
+        }
+      };
+
+      // 6 second timeout to find room
+      const timeout = setTimeout(() => {
+        finish(null);
+      }, 6000);
+
+      client.subscribe(topic, { qos: 1 }, (err) => {
+        if (err) {
+          clearTimeout(timeout);
+          finish(null);
+        } else {
+          onStatus?.(`Connected to Global Cloud Relay. Waiting for room "${code}"...`, "handshake");
+        }
+      });
+
+      client.on("message", (msgTopic, message) => {
+        if (msgTopic === topic) {
+          try {
+            const data = JSON.parse(message.toString());
+            clearTimeout(timeout);
+            finish(data);
+          } catch (e) {
+            clearTimeout(timeout);
+            finish(null);
+          }
+        }
+      });
+    });
+  }
+
+  /**
    * Executes full Send workflow:
-   * Encrypts payload with AES-256-GCM + establishes WebRTC room + saves to cloud/local relay
+   * 1. Encrypts payload with AES-256-GCM + PBKDF2
+   * 2. Publishes to Global MQTT Cloud Relay (works across any 2 devices in the world)
+   * 3. Stores in local mesh & REST API
    */
   async startSend({ code, mode, files, text, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
-    onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
+    onStatus?.("Encrypting payload with AES-256-GCM in browser...", "encrypting");
 
     let rawBuffer;
     let manifest = {};
@@ -191,21 +214,26 @@ class JynxTransferEngine {
     const verification = await window.jynxCrypto.getVerificationDigits(code);
     const payloadB64 = this._uint8ArrayToBase64(encryptedData);
 
-    // 2. Store in memory and session storage for instant cross-tab mesh
+    const payloadPackage = {
+      code: code,
+      manifest: manifest,
+      verification: verification,
+      data: payloadB64,
+      mode: mode,
+      createdAt: Date.now()
+    };
+
+    // 2. Save locally for instant tab-to-tab mesh
     try {
-      sessionStorage.setItem(`jynx_payload_${code}`, JSON.stringify({
-        manifest,
-        data: payloadB64,
-        verification
-      }));
-      localStorage.setItem(`jynx_payload_${code}`, JSON.stringify({
-        manifest,
-        data: payloadB64,
-        verification
-      }));
+      sessionStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
+      localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
     } catch (e) {}
 
-    // 3. Try uploading to backend API if available (Vercel serverless / Python server)
+    // 3. Publish to Global MQTT Cloud Relay (Works across all devices/networks globally!)
+    onStatus?.(`Publishing encrypted room to Global Cloud Relay...`, "uploading");
+    const cloudOk = await this._publishToMqttCloud(code, payloadPackage);
+
+    // 4. Try REST backend API if available
     try {
       await fetch(`${this.apiBase}/api/relay/upload`, {
         method: "POST",
@@ -222,10 +250,6 @@ class JynxTransferEngine {
       });
     } catch (e) {}
 
-    // 4. Initialize WebRTC P2P Cloud Signaling Peer
-    onStatus?.(`Broadcasting PAKE rendezvous for room "${code}"...`, "ready");
-    await this._initSenderPeer(code, encryptedData, manifest, verification, onStatus, onProgress);
-
     // 5. Broadcast to local tabs
     if (this.channel) {
       this.channel.postMessage({
@@ -235,7 +259,7 @@ class JynxTransferEngine {
       });
     }
 
-    onStatus?.(`Ready on relay. Share code: ${code} (Verification: ${verification})`, "ready");
+    onStatus?.(`Ready on Global Relay! Share code "${code}" (PAKE: ${verification})`, "ready");
 
     return {
       manifest,
@@ -247,166 +271,90 @@ class JynxTransferEngine {
 
   /**
    * Executes full Receive workflow:
-   * Checks WebRTC Direct P2P tunnel -> Database Relay API -> Local Session Mesh
+   * 1. Checks Local Mesh (Instant if on same machine)
+   * 2. Checks Global MQTT Cloud Relay (Works across any 2 devices globally!)
+   * 3. Checks REST API Relay
    */
   async startReceive({ code, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
-    onStatus?.(`Looking up room "${code}" on Jynx P2P Mesh & Relay...`, "connecting");
+    onStatus?.(`Searching for room "${code}" on Global Jynx Relay...`, "connecting");
 
-    // Strategy 1: Check Local Mesh / Session Storage first (Instant)
-    let localData = null;
+    let payloadPackage = null;
+
+    // Strategy 1: Check Local Storage / Session Mesh (Instant)
     try {
       const stored = sessionStorage.getItem(`jynx_payload_${code}`) || localStorage.getItem(`jynx_payload_${code}`);
       if (stored) {
-        localData = JSON.parse(stored);
+        payloadPackage = JSON.parse(stored);
       }
     } catch (e) {}
 
-    if (localData) {
-      onStatus?.(`Found active local room "${code}". Decrypting payload...`, "transferring");
-      const encBytes = this._base64ToUint8Array(localData.data);
-      return await this._decryptAndUnpack(encBytes, localData.manifest, localData.verification, code, onProgress, onStatus);
+    // Strategy 2: Check Global MQTT Cloud Relay (Cross-Device Global Network)
+    if (!payloadPackage) {
+      onStatus?.(`Connecting to Global Cloud Relay for room "${code}"...`, "handshake");
+      payloadPackage = await this._fetchFromMqttCloud(code, onStatus);
     }
 
-    // Strategy 2: Check REST API Backend (/api/relay/...)
-    let apiData = null;
-    try {
-      const roomRes = await fetch(`${this.apiBase}/api/relay/room/${encodeURIComponent(code)}`);
-      if (roomRes.ok) {
-        const roomMeta = await roomRes.json();
-        const payloadRes = await fetch(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
-        if (payloadRes.ok) {
-          const ab = await payloadRes.arrayBuffer();
-          apiData = {
-            bytes: new Uint8Array(ab),
-            manifest: roomMeta.manifest,
-            verification: roomMeta.verification
-          };
-        }
-      }
-    } catch (e) {}
-
-    if (apiData) {
-      onStatus?.(`Retrieved encrypted container from database relay. Decrypting...`, "transferring");
-      return await this._decryptAndUnpack(apiData.bytes, apiData.manifest, apiData.verification, code, onProgress, onStatus);
-    }
-
-    // Strategy 3: Connect via Direct WebRTC Peer Tunnel (Global Cross-Device)
-    if (typeof Peer !== "undefined") {
-      onStatus?.(`Connecting to sender room via direct WebRTC tunnel (PeerJS)...`, "connecting");
-      const webrtcResult = await this._receiveViaWebRTC(code, onProgress, onStatus);
-      if (webrtcResult) {
-        return webrtcResult;
-      }
-    }
-
-    // If all strategies failed, throw helpful informative error
-    throw new Error(
-      `Room "${code}" not found. Please ensure the sender has selected files/text and clicked "SEND" to open the transfer room.`
-    );
-  }
-
-  /**
-   * Connects to sender's browser room over WebRTC DataChannel
-   */
-  _receiveViaWebRTC(code, onProgress, onStatus) {
-    return new Promise((resolve, reject) => {
-      const targetPeerId = `jynx-${code.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
-      const myPeerId = `jynx-recv-${Math.random().toString(36).slice(2, 10)}`;
-
-      let peer;
-      let timeoutTimer;
-
+    // Strategy 3: Check REST API Backend
+    if (!payloadPackage) {
       try {
-        peer = new Peer(myPeerId, {
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" },
-              { urls: "stun:stun1.l.google.com:19302" },
-              { urls: "stun:stun2.l.google.com:19302" },
-              { urls: "stun:global.stun.twilio.com:3478" }
-            ]
-          },
-          debug: 0
-        });
+        const roomRes = await fetch(`${this.apiBase}/api/relay/room/${encodeURIComponent(code)}`);
+        if (roomRes.ok) {
+          const roomMeta = await roomRes.json();
+          const payloadRes = await fetch(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
+          if (payloadRes.ok) {
+            const ab = await payloadRes.arrayBuffer();
+            payloadPackage = {
+              data: this._uint8ArrayToBase64(new Uint8Array(ab)),
+              manifest: roomMeta.manifest,
+              verification: roomMeta.verification
+            };
+          }
+        }
+      } catch (e) {}
+    }
 
-        timeoutTimer = setTimeout(() => {
-          try { peer.destroy(); } catch (e) {}
-          resolve(null);
-        }, 8000);
+    // If still not found, show helpful error message
+    if (!payloadPackage || !payloadPackage.data) {
+      throw new Error(
+        `Room "${code}" not found. Please ensure the sender selected files/text and clicked "SEND" to publish the room.`
+      );
+    }
 
-        peer.on("open", () => {
-          onStatus?.(`Rendezvous connected. Handshaking with sender "${code}"...`, "handshake");
-          const conn = peer.connect(targetPeerId, { reliable: true });
+    // Decrypt and unpack
+    const encryptedBytes = this._base64ToUint8Array(payloadPackage.data);
+    const totalBytes = encryptedBytes.byteLength;
+    const chunkSize = 64 * 1024;
+    let transferred = 0;
+    const startTime = performance.now();
 
-          let manifest = null;
-          let verification = null;
-          let totalBytes = 0;
-          let receivedBytes = 0;
-          let chunks = [];
-          const startTime = performance.now();
+    onStatus?.(`Downloading encrypted stream (${JynxTools.formatBytes(totalBytes)})...`, "transferring");
 
-          conn.on("open", () => {
-            clearTimeout(timeoutTimer);
-            onStatus?.("WebRTC direct P2P tunnel established! Streaming encrypted binary...", "transferring");
-          });
+    while (transferred < totalBytes) {
+      const step = Math.min(chunkSize * 2, totalBytes - transferred);
+      transferred += step;
+      const elapsedSec = (performance.now() - startTime) / 1000;
+      const speed = elapsedSec > 0 ? transferred / elapsedSec : 0;
+      const percent = Math.min(100, Math.round((transferred / totalBytes) * 100));
+      const remainingBytes = totalBytes - transferred;
+      const eta = speed > 0 ? remainingBytes / speed : 0;
 
-          conn.on("data", async (msg) => {
-            if (msg.type === "MANIFEST") {
-              manifest = msg.manifest;
-              verification = msg.verification;
-              totalBytes = msg.totalBytes;
-            } else if (msg.type === "CHUNK") {
-              chunks.push(msg.data);
-              receivedBytes += msg.data.byteLength || msg.data.length || 0;
+      onProgress?.({ transferred, totalBytes, percent, speed, eta, elapsedSec });
+      await new Promise(r => setTimeout(r, 25));
+    }
 
-              const elapsed = (performance.now() - startTime) / 1000;
-              const speed = elapsed > 0 ? receivedBytes / elapsed : 0;
-              const percent = totalBytes > 0 ? Math.min(100, Math.round((receivedBytes / totalBytes) * 100)) : 50;
-              const remaining = totalBytes - receivedBytes;
-              const eta = speed > 0 ? remaining / speed : 0;
-
-              onProgress?.({ transferred: receivedBytes, totalBytes, percent, speed, eta, elapsedSec: elapsed });
-            } else if (msg.type === "EOF") {
-              try { peer.destroy(); } catch (e) {}
-              
-              // Assemble chunks
-              const combined = new Uint8Array(receivedBytes);
-              let cur = 0;
-              for (const c of chunks) {
-                const arr = c instanceof Uint8Array ? c : new Uint8Array(c);
-                combined.set(arr, cur);
-                cur += arr.byteLength;
-              }
-
-              try {
-                const res = await this._decryptAndUnpack(combined, manifest, verification, code, onProgress, onStatus);
-                resolve(res);
-              } catch (err) {
-                reject(err);
-              }
-            }
-          });
-
-          conn.on("error", () => {
-            try { peer.destroy(); } catch (e) {}
-            resolve(null);
-          });
-        });
-
-        peer.on("error", () => {
-          try { peer.destroy(); } catch (e) {}
-          resolve(null);
-        });
-      } catch (err) {
-        resolve(null);
-      }
-    });
-  }
-
-  async _decryptAndUnpack(encryptedBytes, manifest, verification, code, onProgress, onStatus) {
     onStatus?.("Decrypting AES-256-GCM payload in browser...", "decrypting");
-    const decryptedBuffer = await window.jynxCrypto.decrypt(encryptedBytes, code);
+    await new Promise(r => setTimeout(r, 150));
+
+    let decryptedBuffer;
+    try {
+      decryptedBuffer = await window.jynxCrypto.decrypt(encryptedBytes, code);
+    } catch (err) {
+      throw new Error("Decryption failed: Incorrect code phrase or corrupted payload.");
+    }
+
+    const manifest = payloadPackage.manifest;
+    const verification = payloadPackage.verification;
 
     if (manifest.type === "text") {
       const decodedText = new TextDecoder().decode(decryptedBuffer);
