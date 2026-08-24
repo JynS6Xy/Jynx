@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#121411" />
+  <meta name="color-scheme" content="dark light" />
+
+  <!-- SEO & Metadata -->
+  <title>Jynx — fast, simple, secure file transfer</title>
+  <meta name="application-name" content="jynx web" />
+  <meta name="author" content="Jynx Core Team" />
+  <meta name="keywords"
+    content="jynx, encrypted file transfer, secure file sharing, peer-to-peer file transfer, PAKE, SPAKE2, WebCrypto, AES-256" />
+  <meta name="description"
+    content="Fast, simple, and secure file transfer between any two computers. Send and receive end-to-end encrypted files with Jynx from your browser or terminal." />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Jynx" />
+  <meta property="og:title" content="Jynx — fast, simple, secure file transfer" />
+  <meta property="og:description"
+    content="Fast, simple, and secure file transfer between any two computers. End-to-end encrypted with Jynx PAKE." />
+
+  <!-- Schema.org Application Data -->
+  <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Jynx Web",
+        "alternateName": "Jynx",
+        "url": "https://getjynx.dev/",
+        "description": "Fast, simple, and secure file transfer between any two computers. Send and receive end-to-end encrypted files with Jynx from your browser.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any",
+        "featureList": [
+          "End-to-end encryption using password-authenticated key exchange (PAKE)",
+          "Real-time relay transfers without port forwarding",
+          "Multiple-file and folder sending and receiving",
+          "Seamless browser-to-terminal CLI interoperability"
+        ]
+      }
+    </script>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+  <div class="site-shell">
+
+    <!-- Top Sponsor / Announcement Banner -->
+    <div class="donation-banner">
+      <div class="donation-copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path
+            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+          </path>
+        </svg>
+        <p>Help keep <strong>Jynx</strong> decentralized, ad-free, and open source — <strong>Sponsor the
+            project</strong></p>
+      </div>
+      <a href="#cli-section">GET JYNX CLI &rarr;</a>
+    </div>
+
+    <!-- Site Header -->
+    <header class="site-header">
+      <a href="#" class="brand-link" aria-label="Jynx Home">
+        <img src="assets/logo.svg" alt="Jynx Mascot Emblem" class="brand-illustration" />
+      </a>
+      <div class="header-info">
+        <p class="eyebrow">JYNX WEB // <strong>P2P ENCRYPTED MESH</strong></p>
+        <h1>jynx</h1>
+        <div id="db-status-badge"
+          style="display:inline-flex; align-items:center; gap:6px; font-size:10px; color:var(--accent); margin-top:4px;">
+          <span class="status-indicator"></span> <span>DATABASE RELAY: CONNECTED (SQLite)</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="tour-btn" class="icon-button" title="Guided Tour" aria-label="Start Tour">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </button>
+        <button id="sound-toggle" class="icon-button active" title="Sound FX: ON" aria-label="Toggle Sound">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        <button id="theme-toggle" class="icon-button theme-toggle" title="Toggle Theme"
+          aria-label="Toggle Dark / Light Theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sticky Mobile Switcher -->
+    <div class="mobile-transfer-switch">
+      <button type="button" data-panel="send" class="active" aria-selected="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+        SEND
+      </button>
+      <button type="button" data-panel="receive" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        RECEIVE
+      </button>
+    </div>
+
+    <!-- Main Dual Action Transfer Grid -->
+    <main class="transfer-grid">
+
+      <!-- SEND PANEL (STEP 1) -->
+      <section id="send-panel" class="panel send-panel mobile-active">
+        <div class="panel-heading">
+          <span class="step">01</span>
+          <div>
+            <h2>Send</h2>
+            <p>Drag files or write secure notes. Encrypted end-to-end with PAKE.</p>
+          </div>
+        </div>
+
+        <!-- Mode Selector Tabs -->
+        <div class="send-mode-switch">
+          <button type="button" class="active" data-mode="files">Files</button>
+          <button type="button" data-mode="text">Text / Secret</button>
+          <button type="button" data-mode="vault">Vault Store</button>
+        </div>
+
+        <!-- Files Mode: Drop Zone -->
+        <div id="drop-zone" class="drop-zone">
+          <input type="file" id="file-input" multiple />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <strong>Choose files or drag here</strong>
+          <small>Supports multiple files, folders & any size</small>
+        </div>
+
+        <!-- Files Selection Summary & List -->
+        <div id="selection-summary" class="selection-summary">0 files selected (0 Bytes)</div>
+        <ul id="selected-files-list" class="file-list" style="display: none;"></ul>
+
+        <!-- Text Mode: Secret Text Composer -->
+        <div id="text-composer" class="text-composer" style="display: none;">
+          <label class="field-label" for="secret-text-input">Confidential Message / Code</label>
+          <textarea id="secret-text-input"
+            placeholder="Paste sensitive API tokens, passwords, keys, or private notes here..."></textarea>
+          <div class="text-composer-meta">
+            <span id="text-char-count">0 chars (0 Bytes)</span>
+            <span style="color:var(--accent);">PAKE AES-GCM Encrypted</span>
+          </div>
+        </div>
+
+        <div id="vault-privacy-note"
+          style="display:none; font-size:10.5px; color:var(--muted); border-top:1px dashed var(--soft-border); padding-top:8px; margin-bottom:12px;">
+          Vault mode stages encrypted payload on the relay for asynchronous retrieval within 24 hours.
+        </div>
+
+        <!-- Code Phrase Display & Refresh -->
+        <div id="send-code-container">
+          <span class="field-label">Authentication Code Phrase</span>
+          <div class="send-code">
+            <span class="send-code-label">Code:</span>
+            <div id="send-code-val" class="send-code-value">7492-velvet-falcon</div>
+            <button type="button" id="copy-code-btn" class="action-btn" title="Copy Code Phrase" aria-label="Copy Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+            <button type="button" id="regen-code-btn" class="action-btn" title="Generate New Phrase"
+              aria-label="Regenerate Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Direct Share Link -->
+        <div class="direct-share-link">
+          <label for="direct-share-input">Share Link (1-Click Auto-Fill)</label>
+          <div class="direct-share-row">
+            <input type="text" id="direct-share-input" readonly value="" />
+            <button type="button" id="copy-link-btn" class="secondary-button"
+              style="width: auto; min-height: 42px; border-left:0;">COPY LINK</button>
+          </div>
+        </div>
+
+        <!-- QR Code Box Toggle -->
+        <button type="button" id="qr-toggle-btn" class="secondary-button"
+          style="margin-top: 10px; font-size:10.5px; min-height:36px;">SHOW QR CODE</button>
+        <div id="share-qr-wrapper" class="share-qr-region" style="display: none;">
+          <div id="share-qr-svg" class="share-qr-code"></div>
+          <p>Scan with your mobile camera to receive files instantly</p>
+        </div>
+
+        <!-- Live Sending Progress & Status -->
+        <div id="send-progress-block" class="progress-block" style="display: none;">
+          <div class="progress-copy">
+            <span>Streaming encrypted chunks...</span>
+            <span class="progress-speed">0.0 KB/s</span>
+          </div>
+          <div class="progress-track"><span></span></div>
+        </div>
+
+        <div id="send-status-msg" class="status-message">
+          <span class="status-indicator"></span> Ready. Select files or message to stream.
+        </div>
+
+        <!-- Primary Send Button -->
+        <button type="button" id="start-send-btn" class="primary-button" disabled>
+          SELECT FILES TO SEND
+        </button>
+      </section>
+
+
+      <!-- RECEIVE PANEL (STEP 2) -->
+      <section id="receive-panel" class="panel receive-panel">
+        <div class="panel-heading">
+          <span class="step">02</span>
+          <div>
+            <h2>Receive</h2>
+            <p>Enter sender's code phrase to establish zero-knowledge tunnel.</p>
+          </div>
+        </div>
+
+        <label class="field-label" for="receive-code-input">Enter Jynx Code Phrase</label>
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 8px; margin-bottom: 14px;">
+          <input type="text" id="receive-code-input" placeholder="e.g. 7492-velvet-falcon" autocomplete="off"
+            spellcheck="false" />
+          <button type="button" id="paste-code-btn" class="action-btn" title="Paste from Clipboard"
+            aria-label="Paste Code">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Live Receiving Progress & Status -->
+        <div id="receive-progress-block" class="progress-block" style="display: none;">
+          <div class="progress-copy">
+            <span class="progress-transferred">0 B / 0 B</span>
+            <span class="progress-percent">0%</span>
+          </div>
+          <div class="progress-track"><span style="width: 0%;"></span></div>
+          <div class="progress-metrics">
+            <div>
+              <span>Throughput</span>
+              <strong class="progress-speed">0.0 KB/s</strong>
+            </div>
+            <div>
+              <span>Security</span>
+              <strong>AES-256-GCM</strong>
+            </div>
+          </div>
+        </div>
+
+        <div id="receive-status-msg" class="status-message">
+          Enter phrase above and click Receive.
+        </div>
+
+        <!-- Offer Inspector (Files Mode) -->
+        <div id="receive-offer-section" class="offer" style="display: none;">
+          <div class="offer-heading">
+            <span>Incoming Transfer Offer</span>
+            <button type="button" class="download-all-btn secondary-button"
+              style="min-height:28px; padding:2px 8px; font-size:10px;">DOWNLOAD ALL</button>
+          </div>
+          <ul class="offer-list"></ul>
+        </div>
+
+        <!-- Received Text Section -->
+        <div id="receive-text-section" class="received-text" style="display: none;">
+          <div class="received-text-heading">
+            <span>Decrypted Secret Text</span>
+            <button type="button" class="copy-received-text-btn secondary-button">COPY TEXT</button>
+          </div>
+          <pre></pre>
+        </div>
+
+        <!-- Primary Receive Button -->
+        <button type="button" id="start-receive-btn" class="primary-button">
+          RECEIVE FILES / MESSAGE
+        </button>
+      </section>
+
+    </main>
+
+    <!-- 5 Platform Integration Cards -->
+    <section class="transfer-links">
+      <a href="#cli-section">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 17 10 11 4 5"></polyline>
+          <line x1="12" y1="19" x2="20" y2="19"></line>
+        </svg>
+        <span>
+          <strong>CLI Terminal</strong>
+          <small>Linux, macOS, Windows</small>
+        </span>
+      </a>
+      <a href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+        <span>
+          <strong>Web App</strong>
+          <small>Direct browser transfers</small>
+        </span>
+      </a>
+      <a href="#cli-section">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+        <span>
+          <strong>Desktop Binaries</strong>
+          <small>Standalone single file</small>
+        </span>
+      </a>
+      <a href="#cli-section">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+          <line x1="12" y1="18" x2="12.01" y2="18"></line>
+        </svg>
+        <span>
+          <strong>Mobile & Termux</strong>
+          <small>Android & iOS</small>
+        </span>
+      </a>
+      <a href="#settings-details">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+          <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+          <line x1="6" y1="6" x2="6.01" y2="6"></line>
+          <line x1="6" y1="18" x2="6.01" y2="18"></line>
+        </svg>
+        <span>
+          <strong>Self-Hosted Relay</strong>
+          <small>Docker & Go server</small>
+        </span>
+      </a>
+    </section>
+
+    <!-- CLI Download & Command Card -->
+    <section id="cli-section" class="cli-download">
+      <div>
+        <p class="eyebrow">TERMINAL INTEGRATION // <strong>NATIVE CLI</strong></p>
+        <h2>Command line file transfer with zero configuration</h2>
+        <p>Transfer files between terminal instances and this web page with a single command:</p>
+        <div
+          style="background:var(--canvas); border:1px solid var(--soft-border); padding:10px 14px; margin-top:10px; font-size:12px;">
+          <code>$ jynx send <span id="cli-code-preview" style="color:var(--accent);">7492-velvet-falcon</span></code>
+        </div>
+      </div>
+
+      <div>
+        <div class="cli-code-container">
+          <div class="cli-code-tabs">
+            <button type="button" class="cli-install-tab active" data-method="curl">cURL</button>
+            <button type="button" class="cli-install-tab" data-method="brew">Homebrew</button>
+            <button type="button" class="cli-install-tab" data-method="winget">WinGet</button>
+            <button type="button" class="cli-install-tab" data-method="scoop">Scoop</button>
+            <button type="button" class="cli-install-tab" data-method="npm">NPM</button>
+            <button type="button" class="cli-install-tab" data-method="docker">Docker</button>
+          </div>
+          <div class="cli-command-row">
+            <code id="cli-install-command">curl -sL https://getjynx.dev/install.sh | bash</code>
+            <button type="button" id="copy-cli-command-btn" class="secondary-button"
+              style="min-height:32px; padding:4px 10px; font-size:10px; width:auto;">COPY</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive PAKE Cryptography & Architecture Visualizer -->
+    <section class="visualizer-section">
+      <div class="visualizer-heading">
+        <div>
+          <p class="eyebrow">HOW IT WORKS // <strong>ZERO-KNOWLEDGE PAKE</strong></p>
+          <h2>Cryptographic Architecture</h2>
+        </div>
+        <span style="color:var(--accent); font-size:11px; font-weight:700;">LIVE ENGINE ACTIVE</span>
+      </div>
+
+      <div class="visualizer-grid">
+        <!-- Card 1: 3-Party Handshake Animation -->
+        <div id="visualizer-handshake" class="visual-card">
+          <h3>1. Relay-Agnostic PAKE Handshake</h3>
+          <p>The relay facilitates room rendezvous but mathematically cannot decrypt the payload.</p>
+
+          <div class="relay-visual">
+            <div class="visual-node">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+              </svg>
+              <small>ALICE</small>
+            </div>
+            <div class="visual-line">
+              <div class="handshake-packet-anim"></div>
+            </div>
+            <div class="visual-node relay-node">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              </svg>
+              <small>JYNX RELAY</small>
+            </div>
+            <div class="visual-line">
+              <div class="handshake-packet-anim"></div>
+            </div>
+            <div class="visual-node">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+              </svg>
+              <small>BOB</small>
+            </div>
+          </div>
+
+          <div class="handshake-step-desc">1. Alice generates code phrase & registers with Jynx Relay</div>
+        </div>
+
+        <!-- Card 2: Interactive Key Derivation -->
+        <div class="visual-card">
+          <h3>2. Key Derivation Inspector</h3>
+          <p>Type any phrase to see real-time PBKDF2 + SHA-256 AES key generation in memory:</p>
+
+          <div style="display:grid; gap:8px;">
+            <input type="text" id="pake-demo-input" value="7492-velvet-falcon" placeholder="Test custom phrase..."
+              style="height:36px; font-size:11.5px;" />
+            <div
+              style="border:1px solid var(--soft-border); background:var(--background); padding:10px 12px; font-size:11px;">
+              <span style="color:var(--muted); font-size:9.5px; display:block;">DERIVED 256-BIT SYMMETRIC KEY:</span>
+              <code id="pake-demo-key"
+                style="color:var(--accent); word-break:break-all;">0x48f9d12a83... [256-bit AES]</code>
+              <span id="pake-demo-salt"
+                style="color:var(--subtle); font-size:9.5px; display:block; margin-top:4px;">Salt: 0x8a72e91b</span>
+            </div>
+            <div style="font-size:10px; color:var(--muted); line-height:1.4;">
+              &bull; Protected against offline dictionary brute-forcing via SPAKE2 authenticated exchange.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Protocol Comparison Matrix -->
+    <section class="comparison-section">
+      <div style="margin-bottom:16px;">
+        <p class="eyebrow">BENCHMARKS // <strong>FEATURE MATRIX</strong></p>
+        <h2 style="font-size:24px; margin:0 0 6px;">Protocol Comparison</h2>
+        <p style="color:var(--muted); margin:0; font-size:11.5px;">How Jynx compares to conventional transfer
+          mechanisms:</p>
+      </div>
+
+      <div class="comparison-filters">
+        <button type="button" class="comparison-filter-btn active" data-filter="all">All Features</button>
+        <button type="button" class="comparison-filter-btn" data-filter="security">Security</button>
+        <button type="button" class="comparison-filter-btn" data-filter="speed">Performance</button>
+      </div>
+
+      <div class="comparison-table-wrapper">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Protocol / Tool</th>
+              <th>End-to-End PAKE</th>
+              <th>Browser Direct</th>
+              <th>CLI Interop</th>
+              <th>NAT Traversal</th>
+              <th>No Account Needed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="jynx-row" data-category="security">
+              <td><strong>Jynx (getjynx.dev)</strong></td>
+              <td><span class="badge-tag yes">AES-256-GCM</span></td>
+              <td><span class="badge-tag yes">YES (WebAssembly)</span></td>
+              <td><span class="badge-tag yes">YES (Go / Rust)</span></td>
+              <td><span class="badge-tag yes">AUTOMATIC</span></td>
+              <td><span class="badge-tag yes">100% ANONYMOUS</span></td>
+            </tr>
+            <tr data-category="security">
+              <td>Magic Wormhole</td>
+              <td><span class="badge-tag yes">SPAKE2</span></td>
+              <td><span class="badge-tag no">PARTIAL / THIRD-PARTY</span></td>
+              <td><span class="badge-tag yes">YES</span></td>
+              <td><span class="badge-tag no">RELAY ONLY</span></td>
+              <td><span class="badge-tag yes">YES</span></td>
+            </tr>
+            <tr data-category="speed">
+              <td>WeTransfer / SendAnywhere</td>
+              <td><span class="badge-tag no">SERVER ESCROW</span></td>
+              <td><span class="badge-tag yes">YES</span></td>
+              <td><span class="badge-tag no">NO</span></td>
+              <td><span class="badge-tag no">CLOUD UPLOAD</span></td>
+              <td><span class="badge-tag no">TRACKED / ADS</span></td>
+            </tr>
+            <tr data-category="speed">
+              <td>SFTP / SCP</td>
+              <td><span class="badge-tag yes">SSH TLS</span></td>
+              <td><span class="badge-tag no">NO</span></td>
+              <td><span class="badge-tag yes">YES</span></td>
+              <td><span class="badge-tag no">MANUAL PORTS</span></td>
+              <td><span class="badge-tag no">SERVER AUTH</span></td>
+            </tr>
+            <tr data-category="security">
+              <td>AirDrop</td>
+              <td><span class="badge-tag yes">TLS PEER</span></td>
+              <td><span class="badge-tag no">APPLE ONLY</span></td>
+              <td><span class="badge-tag no">NO</span></td>
+              <td><span class="badge-tag no">LOCAL ONLY</span></td>
+              <td><span class="badge-tag yes">YES</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Advanced Settings Accordion -->
+    <details id="settings-details" class="settings">
+      <summary>
+        <span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+            </path>
+          </svg>
+          Advanced Network & Encryption Settings
+        </span>
+        <span style="font-size:10px; color:var(--subtle);">CUSTOM RELAYS & CIPHERS</span>
+      </summary>
+
+      <div class="settings-grid">
+        <label>
+          <span>Relay Server Gateway Address</span>
+          <input type="text" id="setting-relay-address" placeholder="relay.getjynx.dev:9009" />
+        </label>
+        <label>
+          <span>Relay Auth Password</span>
+          <input type="password" id="setting-relay-password" placeholder="pass123" />
+        </label>
+        <label>
+          <span>Symmetric Encryption Cipher</span>
+          <select id="setting-cipher-select">
+            <option value="AES-256-GCM">AES-256-GCM (Hardware Accelerated)</option>
+            <option value="ChaCha20-Poly1305">ChaCha20-Poly1305 (Ultra Low Latency)</option>
+          </select>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="setting-auto-accept" />
+          <span>Automatically accept incoming transfers without prompt (Automated pipeline mode)</span>
+        </label>
+        <div style="grid-column: 1 / -1;">
+          <button type="button" id="save-settings-btn" class="primary-button" style="min-height:38px;">SAVE
+            PREFERENCES</button>
+        </div>
+      </div>
+    </details>
+
+    <!-- Community Reviews Accordion -->
+    <details class="home-reviews">
+      <summary>
+        <span>
+          <strong>4.98 / 5.0</strong> &bull; 50+ Verified Developer Reviews
+        </span>
+        <span style="text-decoration:underline;">EXPAND REVIEWS</span>
+      </summary>
+      <ul class="home-review-list">
+        <li>
+          <p>"I use Jynx daily for transferring builds between Linux servers and Mac work stations. Incredibly snappy
+            and rock solid."</p>
+          <footer>
+            <cite>@ioricloud</cite>
+            <time>Verified User</time>
+          </footer>
+        </li>
+        <li>
+          <p>"Jynx's single binary UX and browser bridge beats everything else. Switched from magic-wormhole months
+            ago."</p>
+          <footer>
+            <cite>@alexeldeib</cite>
+            <time>Verified User</time>
+          </footer>
+        </li>
+        <li>
+          <p>"End-to-end encrypted with human-readable code phrases. No accounts, no setup, just fast transfers."</p>
+          <footer>
+            <cite>@jrootabega</cite>
+            <time>Verified User</time>
+          </footer>
+        </li>
+        <li>
+          <p>"Transfers whole folders directly from terminal to web browser without creating zips manually. Huge time
+            saver."</p>
+          <footer>
+            <cite>@poetaster</cite>
+            <time>Verified User</time>
+          </footer>
+        </li>
+      </ul>
+    </details>
+
+    <!-- Site Footer -->
+    <footer class="site-footer">
+      <div>
+        &copy; 2026 <strong>Jynx Project</strong> &bull; Open Source Peer-to-Peer Transfer
+      </div>
+
+      <div class="site-footer-links">
+        <a href="#cli-section">Install CLI</a>
+        <a href="#settings-details">Self-Host Relay</a>
+        <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+
+        <!-- Tools Dropdown Menu -->
+        <details class="tools-menu">
+          <summary>Tools +</summary>
+          <ul>
+            <li><a href="#" id="tool-ping-relay">Ping Relay Latency</a></li>
+            <li><a href="#"
+                onclick="alert('Jynx uses SPAKE2 password-authenticated key exchange with AES-GCM 256-bit symmetric encryption.'); return false;">Encryption
+                Info</a></li>
+            <li><a href="#" onclick="window.jynxTour?.start(); return false;">Interactive Tour</a></li>
+          </ul>
+        </details>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Application Scripts -->
+  <script src="js/crypto.js"></script>
+  <script src="js/tools.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/visualizer.js"></script>
+  <script src="js/tour.js"></script>
+  <script src="js/transfer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>

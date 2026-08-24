@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Local Database & Sessions
+jynx_relay.db
+jynx_relay.db-journal
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
