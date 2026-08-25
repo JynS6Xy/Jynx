@@ -1,10 +1,8 @@
 // Vercel Serverless Function: GET /api/relay/room/[code]
-let rooms = global._jynxRooms || (global._jynxRooms = new Map());
+import { redis, roomKey, setCorsHeaders } from "../_redis.js";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  setCorsHeaders(req, res, "GET, OPTIONS");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -16,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   const cleanCode = code.trim().toLowerCase();
-  const room = rooms.get(cleanCode);
+  const room = await redis.get(roomKey(cleanCode));
 
   if (!room || Date.now() > room.expiresAt) {
     return res.status(404).json({ error: "Room not found or expired" });

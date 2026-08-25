@@ -1,10 +1,8 @@
 // Vercel Serverless Function: POST /api/relay/upload
-let rooms = global._jynxRooms || (global._jynxRooms = new Map());
+import { redis, roomKey, setCorsHeaders } from "./_redis.js";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  setCorsHeaders(req, res, "POST, OPTIONS");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -21,27 +19,34 @@ export default async function handler(req, res) {
     }
 
     const cleanCode = code.trim().toLowerCase();
-    rooms.set(cleanCode, {
+    const ttlSeconds = ttl || 86400;
+
+    const room = {
       code: cleanCode,
       manifest: manifest || {},
       verification: verification || "",
       payload_b64: payload_b64,
       mode: mode || "files",
       createdAt: Date.now(),
-      expiresAt: Date.now() + (ttl || 86400) * 1000,
+      expiresAt: Date.now() + ttlSeconds * 1000,
       downloads: 0,
       max_downloads: max_downloads || 10
-    });
+    };
 
-    console.log(`[JYNX RELAY] Room ${cleanCode} created in memory.`);
+    // EX sets the key's TTL directly in Redis, so expired rooms are
+    // automatically evicted without any manual pruning job.
+    await redis.set(roomKey(cleanCode), room, { ex: ttlSeconds });
+
+    console.log(`[JYNX RELAY] Room ${cleanCode} stored in Redis (ttl ${ttlSeconds}s).`);
 
     return res.status(201).json({
       status: "STORED",
       code: cleanCode,
       bytes: payload_b64.length,
-      expires_in: ttl || 86400
+      expires_in: ttlSeconds
     });
   } catch (err) {
+    console.error("[JYNX RELAY] upload error:", err);
     return res.status(500).json({ error: err.message });
   }
 }

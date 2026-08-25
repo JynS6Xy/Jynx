@@ -1,10 +1,8 @@
 // Vercel Serverless Function: GET /api/relay/payload/[code]
-let rooms = global._jynxRooms || (global._jynxRooms = new Map());
+import { redis, roomKey, setCorsHeaders } from "../_redis.js";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  setCorsHeaders(req, res, "GET, OPTIONS");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -16,13 +14,18 @@ export default async function handler(req, res) {
   }
 
   const cleanCode = code.trim().toLowerCase();
-  const room = rooms.get(cleanCode);
+  const key = roomKey(cleanCode);
+  const room = await redis.get(key);
 
   if (!room || !room.payload_b64 || Date.now() > room.expiresAt) {
     return res.status(404).json({ error: "Payload not found or expired" });
   }
 
   room.downloads = (room.downloads || 0) + 1;
+
+  // Re-save the updated download count, keeping the remaining TTL.
+  const remainingTtl = Math.max(1, Math.floor((room.expiresAt - Date.now()) / 1000));
+  await redis.set(key, room, { ex: remainingTtl });
 
   const binaryBuffer = Buffer.from(room.payload_b64, "base64");
 
