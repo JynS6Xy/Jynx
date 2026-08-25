@@ -354,6 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const sendProgress = document.getElementById("send-progress-block");
 
     sendBtn.disabled = true;
+    sendBtn.classList.add("loading");
     window.jynxSettings?.playSound("connect");
 
     const textInput = document.getElementById("secret-text-input");
@@ -399,6 +400,8 @@ document.addEventListener("DOMContentLoaded", () => {
     } finally {
       isSending = false;
       sendBtn.disabled = false;
+      sendBtn.classList.remove("loading");
+      updateSendButtonState();
     }
   }
 
@@ -448,6 +451,7 @@ document.addEventListener("DOMContentLoaded", () => {
       isReceiving = true;
 
       receiveBtn.disabled = true;
+      receiveBtn.classList.add("loading");
       if (offerSection) offerSection.style.display = "none";
       if (textSection) textSection.style.display = "none";
       if (progressBlock) progressBlock.style.display = "block";
@@ -551,6 +555,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } finally {
         isReceiving = false;
         receiveBtn.disabled = false;
+        receiveBtn.classList.remove("loading");
       }
     }
   }

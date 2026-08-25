@@ -615,6 +615,45 @@ button:disabled, input:disabled {
   opacity: 0.35;
 }
 
+/* Loading state for buttons */
+.primary-button.loading,
+.secondary-button.loading {
+  color: transparent !important;
+  pointer-events: none;
+  position: relative;
+}
+
+.primary-button.loading::after,
+.secondary-button.loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: jynx-spin 0.8s linear infinite;
+}
+
+.primary-button.loading::after {
+  border-color: var(--background);
+  border-top-color: transparent;
+}
+
+.secondary-button.loading::after {
+  border-color: var(--foreground);
+  border-top-color: transparent;
+}
+
+@keyframes jynx-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
 /* Transfer Status Messages & Progress */
 .status-message {
   min-height: 38px;

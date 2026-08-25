@@ -184,6 +184,7 @@ class JynxTransferEngine {
     }
 
     // 1. WebCrypto AES-256-GCM Encryption
+    onStatus?.("Encrypting payload with AES-256-GCM...", "encrypting");
     const encryptedData = await window.jynxCrypto.encrypt(rawBuffer, code);
     const verification = await window.jynxCrypto.getVerificationDigits(code);
     const payloadB64 = this._uint8ArrayToBase64(encryptedData);
@@ -203,9 +204,10 @@ class JynxTransferEngine {
       localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
     } catch (e) {}
 
-    onStatus?.("Staging encrypted payload to Cloud Relay...", "uploading");
+    onStatus?.("Staging encrypted payload locally...", "staging");
 
     // 3. Upload to Vercel Serverless Relay
+    onStatus?.("Uploading to Cloud Relay...", "uploading");
     let serverlessOk = false;
     try {
       const res = await fetch(`${this.apiBase}/api/relay/upload`, {
@@ -226,6 +228,8 @@ class JynxTransferEngine {
         console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
       }
     } catch (e) {}
+
+    onStatus?.("Upload complete. Finalizing...", "staged");
 
     // 4. Publish to Global MQTT Cloud Relay
     await this._publishToMqttCloud(code, payloadPackage);
