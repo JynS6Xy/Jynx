@@ -1,9 +1,0 @@
-{
-  "name": "jynx",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Jynx P2P file & secret transfer relay",
-  "dependencies": {
-    "@upstash/redis": "^1.34.3"
-  }
-}
