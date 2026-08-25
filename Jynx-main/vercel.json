@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/relay/upload",
+      "destination": "/api/relay/upload.js"
+    },
+    {
+      "source": "/api/relay/room/:code",
+      "destination": "/api/relay/room/[code].js"
+    },
+    {
+      "source": "/api/relay/payload/:code",
+      "destination": "/api/relay/payload/[code].js"
+    },
+    {
+      "source": "/api/relay/stats",
+      "destination": "/api/relay/stats.js"
+    }
+  ]
+}
