@@ -17,8 +17,63 @@ const JYNX_WORDLIST = [
 
 class JynxTools {
   /**
-   * Generates a 3-part code phrase: [4-digit prefix]-[word1]-[word2]
-   * Example: 7492-velvet-falcon
+   * Automatically generates a secure, opaque code phrase deterministically derived
+   * from the payload without leaking or displaying confidential content or file details.
+   * Example: "7492-velvet-falcon"
+   */
+  static generateFileCodePhrase(files = [], mode = "files", text = "") {
+    if (mode === "text") {
+      const cleanText = (text || "").trim();
+      if (!cleanText) return "enter-text-to-generate";
+
+      let h1 = 0;
+      let h2 = 0;
+      for (let i = 0; i < cleanText.length; i++) {
+        h1 = ((h1 << 5) - h1) + cleanText.charCodeAt(i);
+        h1 |= 0;
+        h2 = ((h2 << 7) + h2) ^ (cleanText.charCodeAt(i) * 31);
+        h2 |= 0;
+      }
+      const num = Math.abs(h1 % 9000) + 1000;
+      const wIdx1 = Math.abs(h1) % JYNX_WORDLIST.length;
+      let wIdx2 = Math.abs(h2) % JYNX_WORDLIST.length;
+      if (wIdx2 === wIdx1) wIdx2 = (wIdx1 + 1) % JYNX_WORDLIST.length;
+
+      const word1 = JYNX_WORDLIST[wIdx1];
+      const word2 = JYNX_WORDLIST[wIdx2];
+      return `${num}-${word1}-${word2}`;
+    }
+
+    // Files or Vault mode
+    if (!files || files.length === 0) {
+      return "select-files-to-generate";
+    }
+
+    let seed = "";
+    for (const f of files) {
+      seed += `${f.name}:${f.size}:${f.lastModified || 0};`;
+    }
+
+    let h1 = 0;
+    let h2 = 0;
+    for (let i = 0; i < seed.length; i++) {
+      h1 = ((h1 << 5) - h1) + seed.charCodeAt(i);
+      h1 |= 0;
+      h2 = ((h2 << 7) + h2) ^ (seed.charCodeAt(i) * 31);
+      h2 |= 0;
+    }
+    const num = Math.abs(h1 % 9000) + 1000;
+    const wIdx1 = Math.abs(h1) % JYNX_WORDLIST.length;
+    let wIdx2 = Math.abs(h2) % JYNX_WORDLIST.length;
+    if (wIdx2 === wIdx1) wIdx2 = (wIdx1 + 1) % JYNX_WORDLIST.length;
+
+    const word1 = JYNX_WORDLIST[wIdx1];
+    const word2 = JYNX_WORDLIST[wIdx2];
+    return `${num}-${word1}-${word2}`;
+  }
+
+  /**
+   * Generates a 3-part code phrase fallback
    */
   static generateCodePhrase() {
     const num = Math.floor(1000 + Math.random() * 9000);

@@ -85,46 +85,38 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   padding: 42px 0 32px;
 }
 
-/* Top Notice Banner */
-.notice-banner {
+/* Notice Banner */
+.size-limit-banner {
   border: 1px solid var(--accent);
-  background: var(--background);
-  margin-bottom: 24px;
-  display: flex;
-  align-items: center;
-  padding: 12px 18px;
+  background: var(--panel-tint);
+  margin-bottom: 26px;
+  display: block;
 }
 
-.notice-copy {
-  display: flex;
+.size-limit-copy {
   align-items: center;
   gap: 12px;
-  width: 100%;
+  padding: 12px 16px;
+  display: flex;
 }
 
-.notice-copy svg {
+.size-limit-copy svg {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   color: var(--accent);
 }
 
-.notice-copy p {
+.size-limit-copy p {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--foreground);
-  letter-spacing: 0.02em;
 }
 
-.notice-copy p strong {
+.size-limit-copy strong {
   font-weight: 800;
   color: var(--accent);
-}
-
-.notice-copy .highlight-limit {
-  color: var(--accent);
-  font-weight: 800;
 }
 
 /* Header */
@@ -426,110 +418,7 @@ textarea:focus, input:focus {
   display: flex;
 }
 
-/* Gmail Holder Container */
-.gmail-holder-container {
-  margin-top: 18px;
-  margin-bottom: 14px;
-}
-
-.gmail-holder-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 7px;
-}
-
-.gmail-holder-header .field-label {
-  margin: 0;
-}
-
-.smtp-config-link {
-  background: transparent;
-  border: none;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-  display: inline-flex;
-  align-items: center;
-}
-
-.smtp-config-link:hover {
-  opacity: 0.8;
-}
-
-.gmail-holder-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-}
-
-.gmail-input {
-  border: 1px solid var(--subtle);
-  height: 42px;
-  color: var(--foreground);
-  background: var(--background);
-  padding: 0 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.gmail-input:focus {
-  border-color: var(--foreground);
-}
-
-.gmail-action-btn {
-  border: 1px solid var(--foreground);
-  height: 42px;
-  padding: 0 16px;
-  color: var(--background);
-  background: var(--foreground);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.gmail-action-btn:hover {
-  color: var(--foreground);
-  background: var(--background);
-}
-
-.gmail-feedback {
-  margin-top: 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--accent);
-}
-
 /* Code Phrase Display & Input Box */
-.code-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 18px;
-  margin-bottom: 7px;
-}
-
-.code-header-row .field-label {
-  margin: 0;
-}
-
-.field-tag {
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-}
-
 .field-label {
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1510,8 +1399,21 @@ details[open] summary {
 
 @media (max-width: 768px) {
   .site-header {
-    grid-template-columns: 80px minmax(0, 1fr);
-    gap: 14px;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-illustration {
+    width: 64px;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .header-info h1 {
+    font-size: clamp(28px, 8vw, 38px);
+    line-height: 1.1;
+    margin-top: 2px;
   }
 
   .header-actions {
@@ -1583,7 +1485,7 @@ details[open] summary {
   }
 
   .send-code {
-    grid-template-columns: minmax(0, 1fr) 42px 42px;
+    grid-template-columns: minmax(0, 1fr) 42px;
   }
 
   .send-code-label {
@@ -1594,3 +1496,24 @@ details[open] summary {
     grid-template-columns: 1fr;
   }
 }
+
+/* SMTP / Gmail Configuration Box & Indicators */
+.smtp-config-box {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.smtp-config-box input {
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--soft-border);
+}
+
+.smtp-config-box input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.text-link-btn:hover {
+  opacity: 0.8;
+}
+

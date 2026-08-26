@@ -8,9 +8,15 @@ jynx_relay.db
 jynx_relay.db-journal
 *.log
 
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
 # Local test payload blobs (uploaded via the web UI during local testing)
 payloads/
 
 # OS
 .DS_Store
 Thumbs.db
+
