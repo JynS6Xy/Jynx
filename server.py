@@ -10,12 +10,101 @@ import json
 import base64
 import sqlite3
 import mimetypes
+import smtplib
+import socket
+from email.message import EmailMessage
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
-PORT = int(os.environ.get("PORT", 8099))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def load_dotenv(env_path):
+    """Loads key-value pairs from a .env file into os.environ if present."""
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        print(f"[JYNX ENV] Could not load .env: {e}")
+
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+PORT = int(os.environ.get("PORT", 8099))
 DB_FILE = os.path.join(BASE_DIR, "jynx_relay.db")
+
+def get_smtp_credentials(client_config=None):
+    """Extracts and resolves SMTP settings from client request or environment variables."""
+    cfg = client_config or {}
+    host = cfg.get("host") or os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    port = int(cfg.get("port") or os.environ.get("SMTP_PORT", 587))
+    user = (cfg.get("user") or os.environ.get("SMTP_USER", "")).strip()
+    password = (cfg.get("pass") or os.environ.get("SMTP_PASS", "")).strip()
+    from_email = (cfg.get("from_email") or os.environ.get("SMTP_FROM", "")).strip() or user or "no-reply@jynx.dev"
+    
+    # Clean Gmail App Passwords (strip interstitial spaces if user copied "abcd efgh ijkl mnop")
+    if "gmail.com" in host.lower() and password:
+        password = password.replace(" ", "")
+
+    return {
+        "host": host,
+        "port": port,
+        "user": user,
+        "pass": password,
+        "from_email": from_email
+    }
+
+def dispatch_smtp_mail(to_email, subject, text_content, html_content, smtp_cfg):
+    """Dispatches email via SMTP with full error handling and TLS/SSL support."""
+    host = smtp_cfg["host"]
+    port = smtp_cfg["port"]
+    user = smtp_cfg["user"]
+    password = smtp_cfg["pass"]
+    from_email = smtp_cfg["from_email"]
+
+    if not user or not password:
+        raise ValueError(
+            "SMTP credentials not configured. Please enter your Gmail address and 16-character App Password in Settings or .env file."
+        )
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg.set_content(text_content)
+    if html_content:
+        msg.add_alternative(html_content, subtype="html")
+
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+                server.login(user, password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(user, password)
+                server.send_message(msg)
+        return True
+    except smtplib.SMTPAuthenticationError as e:
+        raise ValueError(
+            "Gmail/SMTP Authentication Error (535). Invalid username or password. "
+            "For Gmail: Enable 2-Step Verification on your Google Account and generate a 16-character App Password at myaccount.google.com/apppasswords."
+        ) from e
+    except (smtplib.SMTPConnectError, socket.timeout, ConnectionRefusedError, OSError) as e:
+        raise ValueError(f"Could not connect to SMTP server at {host}:{port}. Error: {str(e)}") from e
+    except smtplib.SMTPException as e:
+        raise ValueError(f"SMTP Protocol Error: {str(e)}") from e
 
 class JynxDatabase:
     def __init__(self, db_path=DB_FILE):
@@ -62,6 +151,10 @@ class JynxDatabase:
         now = int(time.time())
         expires_at = now + ttl_seconds
         manifest_str = json.dumps(manifest) if isinstance(manifest, dict) else str(manifest)
+
+        MAX_PAYLOAD_BYTES = 52428800 # 50 MB
+        if payload_bytes and len(payload_bytes) > MAX_PAYLOAD_BYTES:
+            raise ValueError("Payload exceeds maximum size limit of 50 MB.")
 
         with self.get_conn() as conn:
             cursor = conn.cursor()
@@ -283,6 +376,167 @@ class JynxHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 resp = json.dumps({"error": str(e)}).encode("utf-8")
                 self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(resp)
+            return
+
+        if path == "/api/test-smtp":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            try:
+                data = json.loads(body.decode("utf-8")) if body else {}
+                client_smtp = data.get("smtp_config")
+                smtp_cfg = get_smtp_credentials(client_smtp)
+
+                if not smtp_cfg["user"] or not smtp_cfg["pass"]:
+                    raise ValueError(
+                        "Please enter both a Sender Gmail/Email and an App Password."
+                    )
+
+                # Test connection and authentication
+                host = smtp_cfg["host"]
+                port = smtp_cfg["port"]
+                user = smtp_cfg["user"]
+                password = smtp_cfg["pass"]
+
+                if port == 465:
+                    with smtplib.SMTP_SSL(host, port, timeout=10) as server:
+                        server.login(user, password)
+                else:
+                    with smtplib.SMTP(host, port, timeout=10) as server:
+                        server.ehlo()
+                        server.starttls()
+                        server.ehlo()
+                        server.login(user, password)
+
+                resp = json.dumps({
+                    "status": "SUCCESS",
+                    "message": f"Successfully authenticated with {host}:{port} as {user}!"
+                }).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(resp)
+            except Exception as e:
+                resp = json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(resp)
+            return
+
+        if path == "/api/send-email":
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length == 0:
+                self.send_response(400)
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(b'{"error": "Empty body"}')
+                return
+
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                to_email = data.get("to_email", "").strip()
+                code = data.get("code", "").strip()
+                share_url = data.get("share_url", "").strip()
+                manifest = data.get("manifest", {})
+                client_smtp = data.get("smtp_config")
+
+                if not to_email or not code:
+                    self.send_response(400)
+                    self.send_cors()
+                    self.end_headers()
+                    self.wfile.write(b'{"error": "Missing recipient email or transfer code"}')
+                    return
+
+                smtp_cfg = get_smtp_credentials(client_smtp)
+
+                # Determine file description (without leaking sensitive file names or contents)
+                if isinstance(manifest, dict) and manifest.get("type") == "files":
+                    files_count = manifest.get("filesCount", 1)
+                    transfer_info = f"Encrypted File Package ({files_count} item{'s' if files_count > 1 else ''})"
+                else:
+                    transfer_info = "Confidential Encrypted Message"
+
+                subject = f"Jynx Transfer Ready: [{code}]"
+
+                text_content = (
+                    f"Hello,\n\n"
+                    f"You have received an end-to-end encrypted transfer via Jynx.\n\n"
+                    f"Transfer Details: {transfer_info}\n"
+                    f"Authentication Code: {code}\n"
+                    f"Direct Access Link: {share_url}\n\n"
+                    f"How to receive:\n"
+                    f"1. Open Jynx (or click the direct access link above)\n"
+                    f"2. Enter authentication code: {code}\n"
+                    f"3. Decrypt and receive your files directly in your browser.\n\n"
+                    f"Secured with PAKE AES-256-GCM zero-knowledge encryption.\n"
+                )
+
+                html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0c0e0c; color: #ffffff; padding: 24px; }}
+    .card {{ max-width: 520px; margin: 0 auto; background: #151815; border: 1px solid #333d33; border-radius: 8px; overflow: hidden; }}
+    .header {{ background: #1a1e1a; padding: 20px 24px; border-bottom: 1px solid #333d33; }}
+    .header h1 {{ margin: 0; font-size: 20px; color: #50fa7b; font-family: monospace; letter-spacing: 0.05em; }}
+    .body {{ padding: 24px; }}
+    .code-box {{ background: #050605; border: 1px dashed #50fa7b; border-radius: 6px; padding: 16px; text-align: center; margin: 20px 0; }}
+    .code-label {{ font-size: 11px; text-transform: uppercase; color: #889988; letter-spacing: 0.1em; margin-bottom: 6px; font-family: monospace; }}
+    .code-val {{ font-size: 22px; font-weight: bold; color: #50fa7b; font-family: monospace; letter-spacing: 0.08em; }}
+    .btn {{ display: block; text-align: center; background: #50fa7b; color: #050605; font-weight: bold; text-decoration: none; padding: 14px 20px; border-radius: 4px; font-family: monospace; font-size: 14px; margin-top: 24px; }}
+    .footer {{ font-size: 11px; color: #778877; padding: 16px 24px; border-top: 1px solid #222c22; line-height: 1.5; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>JYNX // SECURE TRANSFER</h1>
+    </div>
+    <div class="body">
+      <p style="margin-top:0; font-size:14px; color:#cccccc;">You have received an end-to-end encrypted transfer.</p>
+      <div style="font-size:13px; color:#aaaaaa; margin-bottom:12px;"><strong>Payload:</strong> {transfer_info}</div>
+      <div class="code-box">
+        <div class="code-label">Authentication Code Phrase</div>
+        <div class="code-val">{code}</div>
+      </div>
+      <a href="{share_url}" class="btn">RECEIVE & DECRYPT TRANSFER &rarr;</a>
+    </div>
+    <div class="footer">
+      Protected with PAKE AES-256-GCM zero-knowledge encryption. Only recipients with this code can decrypt the payload.
+    </div>
+  </div>
+</body>
+</html>"""
+
+                dispatch_smtp_mail(to_email, subject, text_content, html_content, smtp_cfg)
+
+                resp = json.dumps({
+                    "status": "SENT",
+                    "recipient": to_email,
+                    "code": code,
+                    "dispatch": "SMTP",
+                    "sender": smtp_cfg["from_email"]
+                }).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(resp)
+            except Exception as e:
+                resp = json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(resp)))
                 self.send_cors()

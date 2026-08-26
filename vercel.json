@@ -16,6 +16,10 @@
     {
       "source": "/api/relay/stats",
       "destination": "/api/relay/stats.js"
+    },
+    {
+      "source": "/api/send-email",
+      "destination": "/api/send-email.js"
     }
   ]
 }

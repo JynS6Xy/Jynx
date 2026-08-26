@@ -1,19 +1,21 @@
 // Vercel Serverless Function: GET /api/relay/stats
-let rooms = global._jynxRooms || (global._jynxRooms = new Map());
+import { redis, setCorsHeaders } from "./_redis.js";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  setCorsHeaders(req, res, "GET, OPTIONS");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
+  // KEYS is fine at this scale (short-lived rooms with TTLs, low volume).
+  // If this project grows a lot, swap to a maintained counter instead.
+  const keys = await redis.keys("jynx:room:*");
+
   return res.status(200).json({
-    active_rooms: rooms.size,
+    active_rooms: keys.length,
     status: "ONLINE",
     relay: "Vercel Edge Cloud Relay",
-    database: "Global Serverless In-Memory Mesh"
+    database: "Upstash Redis"
   });
 }
