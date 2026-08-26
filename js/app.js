@@ -14,12 +14,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize theme
   initTheme();
 
-  // Initialize code phrase
-  regenerateCode();
+  // Initialize code phrase from selected payload/files
+  updateIntendedFileCode();
 
   // Initialize UI Event Listeners
   initHeaderActions();
   initSendPanel();
+  initSmtpConfig();
   initReceivePanel();
   initCliSection();
   initSettingsModal();
@@ -117,10 +118,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ----------------------------------------------------
-   * CODE GENERATION & SHARING
+   * CODE GENERATION & SHARING (AUTO-GENERATED FOR FILE)
    * ---------------------------------------------------- */
-  function regenerateCode() {
-    currentCode = JynxTools.generateCodePhrase();
+  function updateIntendedFileCode() {
+    if (currentSendMode === "files" || currentSendMode === "vault") {
+      currentCode = JynxTools.generateFileCodePhrase(selectedFiles, currentSendMode, "");
+    } else {
+      const textInput = document.getElementById("secret-text-input");
+      const textVal = textInput ? textInput.value : "";
+      currentCode = JynxTools.generateFileCodePhrase([], "text", textVal);
+    }
     updateCodeDisplay();
   }
 
@@ -128,18 +135,193 @@ document.addEventListener("DOMContentLoaded", () => {
     const codeValEl = document.getElementById("send-code-val");
     const shareInput = document.getElementById("direct-share-input");
     const cliPreview = document.getElementById("cli-code-preview");
+    const autoTagEl = document.getElementById("code-auto-tag");
 
-    if (codeValEl) codeValEl.textContent = currentCode;
+    const isPlaceholder = currentCode === "select-files-to-generate" || currentCode === "enter-text-to-generate";
 
-    const fullUrl = `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(currentCode)}`;
-    if (shareInput) shareInput.value = fullUrl;
+    if (codeValEl) {
+      codeValEl.textContent = currentCode;
+      codeValEl.style.opacity = isPlaceholder ? "0.6" : "1";
+    }
+
+    if (autoTagEl) {
+      autoTagEl.textContent = isPlaceholder ? "[AUTO-GENERATES ON SELECTION]" : "[AUTO-GENERATED FOR INTENDED FILE]";
+    }
+
+    const fullUrl = isPlaceholder
+      ? ""
+      : `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(currentCode)}`;
+    
+    if (shareInput) {
+      shareInput.value = fullUrl;
+      shareInput.placeholder = "Select files above to generate share link";
+    }
     if (cliPreview) cliPreview.textContent = currentCode;
 
     // Update QR Code
     const qrRegion = document.getElementById("share-qr-svg");
     if (qrRegion) {
-      qrRegion.innerHTML = JynxTools.generateQRCodeSVG(fullUrl, 200);
+      qrRegion.innerHTML = JynxTools.generateQRCodeSVG(fullUrl || window.location.href, 200);
     }
+
+    // Update Gmail Web Quick Link if visible
+    updateGmailWebButton();
+  }
+
+  /* ----------------------------------------------------
+   * GMAIL / SMTP CONFIGURATION PANEL
+   * ---------------------------------------------------- */
+  function initSmtpConfig() {
+    const toggleBtn = document.getElementById("toggle-smtp-btn");
+    const panel = document.getElementById("smtp-config-panel");
+    const userInput = document.getElementById("smtp-user-input");
+    const passInput = document.getElementById("smtp-pass-input");
+    const hostInput = document.getElementById("smtp-host-input");
+    const portInput = document.getElementById("smtp-port-input");
+    const togglePassBtn = document.getElementById("toggle-smtp-pass-btn");
+    const testBtn = document.getElementById("test-smtp-btn");
+    const saveBtn = document.getElementById("save-smtp-btn");
+    const statusEl = document.getElementById("smtp-test-status");
+    const badgeEl = document.getElementById("smtp-badge");
+    const receiverEmailInput = document.getElementById("receiver-email-input");
+    const openGmailWebBtn = document.getElementById("open-gmail-web-btn");
+
+    // Load saved SMTP configuration from localStorage
+    try {
+      const saved = localStorage.getItem("jynx-smtp-config");
+      let config = saved ? JSON.parse(saved) : {};
+      
+      if (config.user && userInput) userInput.value = config.user;
+      if (config.pass && passInput) passInput.value = config.pass;
+      if (config.host && hostInput) hostInput.value = config.host;
+      if (config.port && portInput) portInput.value = config.port;
+
+      if (badgeEl && config.user) {
+        badgeEl.textContent = `Configured (${config.user})`;
+        badgeEl.style.color = "var(--accent)";
+      }
+    } catch (e) {}
+
+    if (toggleBtn && panel) {
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = panel.style.display === "none" || !panel.style.display;
+        panel.style.display = isHidden ? "block" : "none";
+        toggleBtn.textContent = isHidden ? "▲ Hide SMTP Settings" : "⚙ Configure Gmail / SMTP";
+        window.jynxSettings?.playSound("click");
+      });
+    }
+
+    if (togglePassBtn && passInput) {
+      togglePassBtn.addEventListener("click", () => {
+        const isPassword = passInput.type === "password";
+        passInput.type = isPassword ? "text" : "password";
+        togglePassBtn.textContent = isPassword ? "🙈" : "👁";
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener("click", () => {
+        const config = {
+          user: userInput?.value.trim() || "",
+          pass: passInput?.value.trim() || "",
+          host: hostInput?.value.trim() || "smtp.gmail.com",
+          port: parseInt(portInput?.value.trim() || "587", 10)
+        };
+        try {
+          localStorage.setItem("jynx-smtp-config", JSON.stringify(config));
+          if (badgeEl) {
+            badgeEl.textContent = config.user ? `Configured (${config.user})` : "Using server defaults";
+            badgeEl.style.color = config.user ? "var(--accent)" : "var(--muted)";
+          }
+          if (statusEl) {
+            statusEl.innerHTML = '<span style="color:var(--accent);">✓ Credentials saved locally!</span>';
+          }
+          window.jynxSettings?.playSound("success");
+          setTimeout(() => {
+            if (statusEl) statusEl.innerHTML = "";
+          }, 3000);
+        } catch (e) {
+          alert("Could not save settings: " + e.message);
+        }
+      });
+    }
+
+    if (testBtn) {
+      testBtn.addEventListener("click", async () => {
+        const config = {
+          user: userInput?.value.trim() || "",
+          pass: passInput?.value.trim() || "",
+          host: hostInput?.value.trim() || "smtp.gmail.com",
+          port: parseInt(portInput?.value.trim() || "587", 10)
+        };
+
+        if (!config.user || !config.pass) {
+          if (statusEl) {
+            statusEl.innerHTML = '<span style="color:var(--danger);">Please enter Sender Gmail and 16-char App Password.</span>';
+          }
+          return;
+        }
+
+        testBtn.disabled = true;
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted);">Testing connection to ' + escapeHtml(config.host) + '...</span>';
+
+        try {
+          const res = await fetch("/api/test-smtp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ smtp_config: config })
+          });
+          const data = await res.json();
+          if (res.ok && data.status === "SUCCESS") {
+            if (statusEl) {
+              statusEl.innerHTML = '<span style="color:var(--accent);">✓ ' + escapeHtml(data.message) + '</span>';
+            }
+            window.jynxSettings?.playSound("success");
+          } else {
+            throw new Error(data.error || "Authentication failed.");
+          }
+        } catch (err) {
+          if (statusEl) {
+            statusEl.innerHTML = '<span style="color:var(--danger);">' + escapeHtml(err.message) + '</span>';
+          }
+          window.jynxSettings?.playSound("error");
+        } finally {
+          testBtn.disabled = false;
+        }
+      });
+    }
+
+    if (receiverEmailInput) {
+      receiverEmailInput.addEventListener("input", updateGmailWebButton);
+    }
+
+    if (openGmailWebBtn) {
+      openGmailWebBtn.addEventListener("click", () => {
+        const toEmail = receiverEmailInput?.value.trim() || "";
+        const shareUrl = `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(currentCode)}`;
+        const manifest = {
+          type: currentSendMode,
+          filesCount: selectedFiles.length,
+          files: selectedFiles.map(f => ({ name: f.name }))
+        };
+        const composeUrl = window.jynxTransferEngine.getGmailComposeUrl({
+          to_email: toEmail,
+          code: currentCode,
+          share_url: shareUrl,
+          manifest: manifest
+        });
+        window.open(composeUrl, "_blank");
+        window.jynxSettings?.playSound("click");
+      });
+    }
+  }
+
+  function updateGmailWebButton() {
+    const receiverEmailInput = document.getElementById("receiver-email-input");
+    const openGmailWebBtn = document.getElementById("open-gmail-web-btn");
+    if (!openGmailWebBtn) return;
+    const hasEmail = receiverEmailInput && receiverEmailInput.value.trim().length > 0;
+    openGmailWebBtn.style.display = hasEmail ? "block" : "none";
   }
 
   /* ----------------------------------------------------
@@ -172,6 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (vaultNote) vaultNote.style.display = "block";
         }
 
+        updateIntendedFileCode();
         updateSendButtonState();
         window.jynxSettings?.playSound("click");
       });
@@ -206,9 +389,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
     function handleFilesSelected(files) {
-      selectedFiles = [...selectedFiles, ...files];
+      const pendingFiles = [...selectedFiles, ...files];
+      const pendingTotalSize = pendingFiles.reduce((acc, f) => acc + f.size, 0);
+
+      if (pendingTotalSize > MAX_FILE_SIZE) {
+        alert("File selection exceeds the maximum limit of 50 MB per transfer.");
+        return;
+      }
+
+      selectedFiles = pendingFiles;
       renderFileList();
+      updateIntendedFileCode();
       updateSendButtonState();
       window.jynxSettings?.playSound("click");
     }
@@ -243,6 +437,7 @@ document.addEventListener("DOMContentLoaded", () => {
           ev.stopPropagation();
           selectedFiles.splice(index, 1);
           renderFileList();
+          updateIntendedFileCode();
           updateSendButtonState();
           window.jynxSettings?.playSound("click");
         });
@@ -255,7 +450,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Text composer character counter
+    // Text composer character counter & code update
     const textInput = document.getElementById("secret-text-input");
     const charCountEl = document.getElementById("text-char-count");
     if (textInput) {
@@ -265,22 +460,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (charCountEl) {
           charCountEl.textContent = `${len} chars (${JynxTools.formatBytes(bytes)})`;
         }
+        updateIntendedFileCode();
         updateSendButtonState();
       });
     }
 
-    // Code refresh & copy
-    const regenBtn = document.getElementById("regen-code-btn");
-    if (regenBtn) {
-      regenBtn.addEventListener("click", () => {
-        regenerateCode();
-        window.jynxSettings?.playSound("click");
-      });
-    }
-
+    // Copy code button
     const copyCodeBtn = document.getElementById("copy-code-btn");
     if (copyCodeBtn) {
       copyCodeBtn.addEventListener("click", () => {
+        if (!currentCode || currentCode.startsWith("select-") || currentCode.startsWith("enter-")) {
+          return;
+        }
         navigator.clipboard.writeText(currentCode);
         copyCodeBtn.classList.add("copied");
         const valEl = document.getElementById("send-code-val");
@@ -298,7 +489,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (copyLinkBtn) {
       copyLinkBtn.addEventListener("click", () => {
         const shareInput = document.getElementById("direct-share-input");
-        if (shareInput) {
+        if (shareInput && shareInput.value) {
           navigator.clipboard.writeText(shareInput.value);
           copyLinkBtn.textContent = "COPIED!";
           window.jynxSettings?.playSound("click");
@@ -358,6 +549,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const textInput = document.getElementById("secret-text-input");
     const payloadText = textInput ? textInput.value : "";
+    const receiverEmailInput = document.getElementById("receiver-email-input");
+    const receiverEmail = receiverEmailInput ? receiverEmailInput.value.trim() : "";
 
     try {
       const result = await window.jynxTransferEngine.startSend({
@@ -365,6 +558,7 @@ document.addEventListener("DOMContentLoaded", () => {
         mode: currentSendMode,
         files: selectedFiles,
         text: payloadText,
+        receiverEmail: receiverEmail,
         onStatus: (msg, stage) => {
           if (sendStatus) {
             sendStatus.innerHTML = `<span class="status-indicator"></span> ${escapeHtml(msg)}`;
@@ -384,9 +578,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
       window.jynxSettings?.playSound("success");
       if (sendStatus) {
+        let emailNotice = "";
+        const shareUrl = `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(currentCode)}`;
+
+        if (receiverEmail) {
+          if (result.emailStatus && result.emailStatus.success) {
+            emailNotice = `
+              <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--soft-border); color:var(--accent); font-size:11px;">
+                ✓ Notification email sent successfully via Gmail SMTP to <strong>${escapeHtml(receiverEmail)}</strong>
+              </div>
+            `;
+          } else {
+            const errReason = result.emailStatus?.error || "SMTP not configured or failed";
+            const composeUrl = window.jynxTransferEngine.getGmailComposeUrl({
+              to_email: receiverEmail,
+              code: currentCode,
+              share_url: shareUrl,
+              manifest: result.manifest
+            });
+            emailNotice = `
+              <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--soft-border); color:var(--danger); font-size:11px;">
+                ⚠ Email notice: ${escapeHtml(errReason)}.
+                <a href="${escapeHtml(composeUrl)}" target="_blank" rel="noopener" style="color:var(--accent); text-decoration:underline; margin-left:6px; font-weight:bold;">
+                  Open & Send in Gmail Web &rarr;
+                </a>
+              </div>
+            `;
+          }
+        }
+
         sendStatus.innerHTML = `
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Ready on relay. Share code: <strong>${currentCode}</strong> (Verification: <strong>${result.verification}</strong>)
+          <div>
+            Ready on relay. Auto-generated Code: <strong>${currentCode}</strong> (Verification: <strong>${result.verification}</strong>)
+            ${emailNotice}
+          </div>
         `;
         sendStatus.className = "status-message done";
       }

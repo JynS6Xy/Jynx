@@ -21,6 +21,12 @@ export default async function handler(req, res) {
     const cleanCode = code.trim().toLowerCase();
     const ttlSeconds = ttl || 86400;
 
+    // Check payload size in bytes (base64 string length * 3/4 approx)
+    const MAX_B64_LEN = Math.ceil(50 * 1024 * 1024 * 4 / 3);
+    if (payload_b64.length > MAX_B64_LEN + 1000) {
+      return res.status(400).json({ error: "Payload exceeds maximum size limit of 50 MB" });
+    }
+
     const room = {
       code: cleanCode,
       manifest: manifest || {},

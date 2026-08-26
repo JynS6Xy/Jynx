@@ -17,8 +17,62 @@ const JYNX_WORDLIST = [
 
 class JynxTools {
   /**
-   * Generates a 3-part code phrase: [4-digit prefix]-[word1]-[word2]
-   * Example: 7492-velvet-falcon
+   * Automatically generates a clean, intended code phrase tied to the specific file(s) or content.
+   * Example: "budget-pdf-4912" or "bundle-3files-8492" or "note-secret-5912"
+   */
+  static generateFileCodePhrase(files = [], mode = "files", text = "") {
+    if (mode === "text") {
+      const cleanText = (text || "").trim();
+      if (!cleanText) return "enter-text-to-generate";
+      const snippet = cleanText.slice(0, 14).toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 10) || "msg";
+      let h = 0;
+      for (let i = 0; i < cleanText.length; i++) {
+        h = ((h << 5) - h) + cleanText.charCodeAt(i);
+        h |= 0;
+      }
+      const num = Math.abs(h % 9000) + 1000;
+      return `note-${snippet}-${num}`;
+    }
+
+    // Files or Vault mode
+    if (!files || files.length === 0) {
+      return "select-files-to-generate";
+    }
+
+    if (files.length === 1) {
+      const file = files[0];
+      const namePart = file.name.replace(/\.[^/.]+$/, "");
+      const extPart = (file.name.match(/\.([^.]+)$/) || [])[1] || "";
+      let slug = namePart.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 16);
+      if (!slug) slug = "file";
+      const extSlug = extPart.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5);
+      const base = extSlug ? `${slug}-${extSlug}` : slug;
+
+      let h = 0;
+      const seed = `${file.name}-${file.size}-${file.lastModified || 0}`;
+      for (let i = 0; i < seed.length; i++) {
+        h = ((h << 5) - h) + seed.charCodeAt(i);
+        h |= 0;
+      }
+      const num = Math.abs(h % 9000) + 1000;
+      return `${base}-${num}`;
+    }
+
+    // Multiple files bundle
+    const firstSlug = files[0].name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 10) || "pkg";
+    const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
+    let h = 0;
+    const seed = `bundle-${files.length}-${totalSize}-${files[0].name}`;
+    for (let i = 0; i < seed.length; i++) {
+      h = ((h << 5) - h) + seed.charCodeAt(i);
+      h |= 0;
+    }
+    const num = Math.abs(h % 9000) + 1000;
+    return `${firstSlug}-${files.length}files-${num}`;
+  }
+
+  /**
+   * Generates a 3-part code phrase fallback
    */
   static generateCodePhrase() {
     const num = Math.floor(1000 + Math.random() * 9000);

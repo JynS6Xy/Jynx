@@ -124,7 +124,7 @@ class JynxTransferEngine {
     });
   }
 
-  async startSend({ code, mode, files, text, onProgress, onStatus }) {
+  async startSend({ code, mode, files, text, receiverEmail, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
     onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
 
@@ -157,6 +157,11 @@ class JynxTransferEngine {
         });
         fileBuffers.push(new Uint8Array(buf));
         totalBytes += file.size;
+      }
+
+      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+      if (totalBytes > MAX_FILE_SIZE) {
+        throw new Error("Selected files exceed maximum size limit of 50 MB.");
       }
 
       manifest = {
@@ -239,14 +244,63 @@ class JynxTransferEngine {
       });
     }
 
+    // 6. Send Email/Gmail notification if recipient email was provided
+    let emailStatus = null;
+    if (receiverEmail) {
+      onStatus?.(`Sending code notification email to ${receiverEmail}...`, "emailing");
+      try {
+        const shareUrl = `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(code)}`;
+        let smtpConfig = null;
+        try {
+          const saved = localStorage.getItem("jynx-smtp-config");
+          if (saved) smtpConfig = JSON.parse(saved);
+        } catch (e) {}
+
+        const emailRes = await fetch(`${this.apiBase}/api/send-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to_email: receiverEmail,
+            code: code,
+            share_url: shareUrl,
+            manifest: manifest,
+            smtp_config: smtpConfig
+          })
+        });
+
+        const emailData = await emailRes.json().catch(() => ({}));
+        if (!emailRes.ok || emailData.error) {
+          throw new Error(emailData.error || `HTTP ${emailRes.status}`);
+        }
+        emailStatus = { success: true, recipient: receiverEmail, data: emailData };
+        console.log("[JYNX EMAIL] Successfully sent email to", receiverEmail, emailData);
+      } catch (e) {
+        console.warn("[JYNX EMAIL] Failed to dispatch email notification", e);
+        emailStatus = { success: false, recipient: receiverEmail, error: e.message };
+      }
+    }
+
     onStatus?.(`Ready on Global Relay! Share code: ${code} (Verification: ${verification})`, "ready");
 
     return {
       manifest,
       verification,
       encryptedData,
-      totalSize: encryptedData.byteLength
+      totalSize: encryptedData.byteLength,
+      emailStatus
     };
+  }
+
+  getGmailComposeUrl({ to_email = "", code = "", share_url = "", manifest = {} }) {
+    const subject = encodeURIComponent(`Jynx Transfer Ready: [${code}]`);
+    let fileDesc = "Encrypted Confidential Message";
+    if (manifest && manifest.type === "files") {
+      fileDesc = `${manifest.filesCount || 1} file(s) (${manifest.files?.[0]?.name || "files"})`;
+    }
+    const body = encodeURIComponent(
+      `Hello,\n\nI have sent you an end-to-end encrypted transfer via Jynx.\n\nPayload: ${fileDesc}\nAuthentication Code: ${code}\nDirect Download Link: ${share_url}\n\nEnter the authentication code on Jynx (or click the link) to decrypt and receive the transfer.\n\nSecured with PAKE AES-256-GCM encryption.`
+    );
+    return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to_email)}&su=${subject}&body=${body}`;
   }
 
   async startReceive({ code, onProgress, onStatus }) {
