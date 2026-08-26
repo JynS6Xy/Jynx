@@ -206,8 +206,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
     function handleFilesSelected(files) {
-      selectedFiles = [...selectedFiles, ...files];
+      const pendingFiles = [...selectedFiles, ...files];
+      const pendingTotalSize = pendingFiles.reduce((acc, f) => acc + f.size, 0);
+
+      if (pendingTotalSize > MAX_FILE_SIZE) {
+        alert("File selection exceeds the maximum limit of 50 MB per transfer.");
+        return;
+      }
+
+      selectedFiles = pendingFiles;
       renderFileList();
       updateSendButtonState();
       window.jynxSettings?.playSound("click");
@@ -358,6 +368,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const textInput = document.getElementById("secret-text-input");
     const payloadText = textInput ? textInput.value : "";
+    const receiverEmailInput = document.getElementById("receiver-email-input");
+    const receiverEmail = receiverEmailInput ? receiverEmailInput.value.trim() : "";
 
     try {
       const result = await window.jynxTransferEngine.startSend({
@@ -365,6 +377,7 @@ document.addEventListener("DOMContentLoaded", () => {
         mode: currentSendMode,
         files: selectedFiles,
         text: payloadText,
+        receiverEmail: receiverEmail,
         onStatus: (msg, stage) => {
           if (sendStatus) {
             sendStatus.innerHTML = `<span class="status-indicator"></span> ${escapeHtml(msg)}`;

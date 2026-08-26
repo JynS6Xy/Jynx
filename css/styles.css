@@ -85,59 +85,38 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   padding: 42px 0 32px;
 }
 
-/* Top Banner */
-.donation-banner {
-  border: 1px solid var(--foreground);
-  background: var(--background);
-  grid-template-columns: 1fr auto;
+/* Notice Banner */
+.size-limit-banner {
+  border: 1px solid var(--accent);
+  background: var(--panel-tint);
   margin-bottom: 26px;
-  display: grid;
+  display: block;
 }
 
-.donation-copy {
+.size-limit-copy {
   align-items: center;
   gap: 12px;
-  min-width: 0;
   padding: 12px 16px;
   display: flex;
 }
 
-.donation-copy svg {
+.size-limit-copy svg {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   color: var(--accent);
 }
 
-.donation-copy p {
+.size-limit-copy p {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
-}
-
-.donation-copy strong {
-  font-weight: 800;
-}
-
-.donation-banner > a {
-  border-left: 1px solid var(--foreground);
-  color: var(--background);
-  background: var(--foreground);
-  white-space: nowrap;
-  justify-content: center;
-  align-items: center;
-  padding: 0 20px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-decoration: none;
-  display: flex;
-  transition: all 0.15s ease;
-}
-
-.donation-banner > a:hover {
   color: var(--foreground);
-  background: var(--background);
+}
+
+.size-limit-copy strong {
+  font-weight: 800;
+  color: var(--accent);
 }
 
 /* Header */
@@ -1381,8 +1360,21 @@ details[open] summary {
 
 @media (max-width: 768px) {
   .site-header {
-    grid-template-columns: 80px minmax(0, 1fr);
-    gap: 14px;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-illustration {
+    width: 64px;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .header-info h1 {
+    font-size: clamp(28px, 8vw, 38px);
+    line-height: 1.1;
+    margin-top: 2px;
   }
 
   .header-actions {

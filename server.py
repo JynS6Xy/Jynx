@@ -10,6 +10,8 @@ import json
 import base64
 import sqlite3
 import mimetypes
+import smtplib
+from email.message import EmailMessage
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
@@ -62,6 +64,10 @@ class JynxDatabase:
         now = int(time.time())
         expires_at = now + ttl_seconds
         manifest_str = json.dumps(manifest) if isinstance(manifest, dict) else str(manifest)
+
+        MAX_PAYLOAD_BYTES = 52428800 # 50 MB
+        if payload_bytes and len(payload_bytes) > MAX_PAYLOAD_BYTES:
+            raise ValueError("Payload exceeds maximum size limit of 50 MB.")
 
         with self.get_conn() as conn:
             cursor = conn.cursor()
@@ -275,6 +281,74 @@ class JynxHandler(BaseHTTPRequestHandler):
                 }).encode("utf-8")
 
                 self.send_response(201)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(resp)
+            except Exception as e:
+                resp = json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(resp)))
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(resp)
+            return
+
+        if path == "/api/send-email":
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length == 0:
+                self.send_response(400)
+                self.send_cors()
+                self.end_headers()
+                self.wfile.write(b'{"error": "Empty body"}')
+                return
+
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+                to_email = data.get("to_email", "").strip()
+                code = data.get("code", "").strip()
+                share_url = data.get("share_url", "").strip()
+
+                if not to_email or not code:
+                    self.send_response(400)
+                    self.send_cors()
+                    self.end_headers()
+                    self.wfile.write(b'{"error": "Missing recipient email or code"}')
+                    return
+
+                smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+                smtp_port = int(os.environ.get("SMTP_PORT", 587))
+                smtp_user = os.environ.get("SMTP_USER", "")
+                smtp_pass = os.environ.get("SMTP_PASS", "")
+
+                msg = EmailMessage()
+                msg["Subject"] = f"Jynx Transfer Code: {code}"
+                msg["From"] = smtp_user if smtp_user else "no-reply@jynx.dev"
+                msg["To"] = to_email
+                msg.set_content(
+                    f"Hello,\n\n"
+                    f"You have received a file/message transfer via Jynx.\n\n"
+                    f"Authentication Code: {code}\n"
+                    f"Direct Link: {share_url}\n\n"
+                    f"Enter this code on Jynx (or click the direct link) to decrypt and receive your transfer."
+                )
+
+                if smtp_user and smtp_pass:
+                    with smtplib.SMTP(smtp_host, smtp_port) as server:
+                        server.starttls()
+                        server.login(smtp_user, smtp_pass)
+                        server.send_message(msg)
+                    sent_via = "SMTP"
+                else:
+                    # Simulated / mock dispatch when environment credentials are not provided
+                    print(f"[JYNX EMAIL MOCK] Sent transfer code '{code}' to {to_email}")
+                    sent_via = "MOCK_DISPATCH"
+
+                resp = json.dumps({"status": "SENT", "recipient": to_email, "dispatch": sent_via}).encode("utf-8")
+                self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(resp)))
                 self.send_cors()
