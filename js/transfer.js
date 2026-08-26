@@ -332,16 +332,27 @@ class JynxTransferEngine {
       throw new Error(detail.error || "Cloudflare R2 is not configured for large transfers.");
     }
     const upload = await initRes.json();
+    if (!Array.isArray(upload.urls) || !upload.partSize) {
+      throw new Error("R2 returned an invalid multipart upload plan.");
+    }
     const bytes = new Uint8Array(encryptedData);
     const parts = [];
     try {
       for (let i = 0; i < upload.urls.length; i++) {
         const start = i * upload.partSize;
         const end = Math.min(start + upload.partSize, bytes.byteLength);
-        const response = await fetch(upload.urls[i], {
-          method: "PUT", body: bytes.slice(start, end),
-          headers: { "Content-Type": "application/octet-stream" }
-        });
+        let response;
+        try {
+          response = await fetch(upload.urls[i], {
+            method: "PUT",
+            mode: "cors",
+            body: bytes.slice(start, end)
+          });
+        } catch (err) {
+          throw new Error(
+            `R2 part ${i + 1} could not be reached. Check bucket CORS allows PUT from ${window.location.origin}.`
+          );
+        }
         if (!response.ok) throw new Error(`R2 upload failed at part ${i + 1} (HTTP ${response.status}).`);
         const etag = response.headers.get("etag");
         if (!etag) {
