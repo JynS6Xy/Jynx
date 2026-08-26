@@ -7,8 +7,10 @@ const rawEndpoint = process.env.R2_ENDPOINT || (
     : ""
 );
 const endpoint = rawEndpoint.trim().replace(/^["']|["']$/g, "").replace(/\/+$/, "");
-const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim();
-const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim();
+// Credentials copied into Vercel can contain an accidental line break. Remove
+// whitespace before AWS signs requests so it cannot enter an HTTP header.
+const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").replace(/\s/g, "");
+const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").replace(/\s/g, "");
 const bucket = (process.env.R2_BUCKET || "").trim();
 
 let endpointError = "";
