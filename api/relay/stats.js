@@ -1,5 +1,5 @@
 // Vercel Serverless Function: GET /api/relay/stats
-import { redis, setCorsHeaders } from "./_redis.js";
+import { redis, usingFallbackStore, setCorsHeaders } from "./_redis.js";
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res, "GET, OPTIONS");
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   return res.status(200).json({
     active_rooms: keys.length,
     status: "ONLINE",
-    relay: "Vercel Edge Cloud Relay",
-    database: "Upstash Redis"
+    relay: "Vercel Cloud",
+    database: usingFallbackStore ? "In-memory (no Redis attached)" : "Upstash Redis"
   });
 }
