@@ -338,29 +338,37 @@ class JynxTransferEngine {
     const bytes = new Uint8Array(encryptedData);
     const parts = [];
     try {
-      for (let i = 0; i < upload.urls.length; i++) {
-        const start = i * upload.partSize;
-        const end = Math.min(start + upload.partSize, bytes.byteLength);
-        let response;
-        try {
-          response = await fetch(upload.urls[i], {
-            method: "PUT",
-            mode: "cors",
-            body: bytes.slice(start, end)
-          });
-        } catch (err) {
-          throw new Error(
-            `R2 part ${i + 1} could not be reached. Check bucket CORS allows PUT from ${window.location.origin}.`
-          );
+      const concurrency = Math.min(4, upload.urls.length);
+      let nextPart = 0;
+      let completedBytes = 0;
+      const uploadPart = async () => {
+        while (nextPart < upload.urls.length) {
+          const index = nextPart++;
+          const start = index * upload.partSize;
+          const end = Math.min(start + upload.partSize, bytes.byteLength);
+          let response;
+          try {
+            response = await fetch(upload.urls[index], {
+              method: "PUT",
+              mode: "cors",
+              body: bytes.slice(start, end)
+            });
+          } catch (err) {
+            throw new Error(
+              `R2 part ${index + 1} could not be reached. Check bucket CORS allows PUT from ${window.location.origin}.`
+            );
+          }
+          if (!response.ok) throw new Error(`R2 upload failed at part ${index + 1} (HTTP ${response.status}).`);
+          const etag = response.headers.get("etag");
+          if (!etag) {
+            throw new Error("R2 did not expose the ETag header. Add ETag to the bucket CORS ExposeHeaders setting.");
+          }
+          parts[index] = { partNumber: index + 1, etag };
+          completedBytes += end - start;
+          onStatus?.(`Uploading to Cloudflare R2... ${Math.round((completedBytes / bytes.byteLength) * 100)}%`, "uploading");
         }
-        if (!response.ok) throw new Error(`R2 upload failed at part ${i + 1} (HTTP ${response.status}).`);
-        const etag = response.headers.get("etag");
-        if (!etag) {
-          throw new Error("R2 did not expose the ETag header. Add ETag to the bucket CORS ExposeHeaders setting.");
-        }
-        parts.push({ partNumber: i + 1, etag });
-        onStatus?.(`Uploading to Cloudflare R2... ${Math.round((end / bytes.byteLength) * 100)}%`, "uploading");
-      }
+      };
+      await Promise.all(Array.from({ length: concurrency }, () => uploadPart()));
     } catch (err) {
       await fetch(`${this.apiBase}/api/relay/r2`, {
         method: "POST", headers: { "Content-Type": "application/json" },
