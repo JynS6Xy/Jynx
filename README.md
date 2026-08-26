@@ -47,6 +47,26 @@ Visit **`http://localhost:8099/`** to start sending and receiving files!
 ### Deploy Frontend on GitHub Pages / Netlify / Vercel
 - Simply drag & drop or point to the root directory `index.html`.
 
+### ⚡ Auto-Deploy to Vercel on every `git push` (GitHub Actions)
+This repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that deploys **to Vercel automatically on every push to `main`**. One-time setup:
+
+1. **Create a Vercel Access Token**
+   - Go to [vercel.com/account/tokens](https://vercel.com/account/tokens) → **Create Token** → copy it.
+
+2. **Find your project IDs**
+   - Install the Vercel CLI: `npm i -g vercel`
+   - In the repo root run `vercel link` (or `vercel` on first deploy) to create the project.
+   - Then run `vercel env pull` to generate `.vercel/project.json` containing `projectId` and the `orgId`.
+
+3. **Add GitHub repository secrets** (Settings → Secrets and variables → Actions):
+   - `VERCEL_TOKEN` = your access token
+   - `VERCEL_ORG_ID` = the `orgId`
+   - `VERCEL_PROJECT_ID` = the `projectId`
+
+4. **Push once** (`git push origin main`) — the workflow builds and runs `vercel --prod`. Every subsequent push re-deploys automatically. 🚀
+
+> Tip: commit messages containing `[skip ci]` will skip the auto-deploy.
+
 ---
 
 ## 🔒 Security Architecture
