@@ -1,5 +1,6 @@
 // Vercel Serverless Function: POST /api/send-email
 import { setCorsHeaders } from "./relay/_redis.js";
+import nodemailer from "nodemailer";
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res, "POST, OPTIONS");
@@ -30,9 +31,28 @@ export default async function handler(req, res) {
       });
     }
 
-    // In a Node serverless environment, if Nodemailer is available or for basic dispatch:
-    // We log and return success status
-    console.log(`[JYNX EMAIL] Dispatched transfer code ${code} to ${to_email} via ${host}:${port}`);
+    const transporter = nodemailer.createTransport({
+      host,
+      port: Number(port),
+      secure: Number(port) === 465,
+      auth: { user, pass }
+    });
+    const fileDescription = manifest?.type === "files"
+      ? `${manifest.filesCount || 1} encrypted file(s)`
+      : "Encrypted confidential message";
+    await transporter.sendMail({
+      from: user,
+      to: to_email,
+      subject: `Jynx Transfer Ready: [${code}]`,
+      text: [
+        "Your encrypted Jynx transfer is ready.",
+        "",
+        `Transfer code: ${code}`,
+        `Payload: ${fileDescription}`,
+        share_url ? `Open Jynx: ${share_url}` : ""
+      ].filter(Boolean).join("\n")
+    });
+    console.log(`[JYNX EMAIL] Sent transfer code ${code} to ${to_email} via ${host}:${port}`);
 
     return res.status(200).json({
       status: "SENT",

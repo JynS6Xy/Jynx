@@ -24,6 +24,10 @@
     {
       "source": "/api/send-email",
       "destination": "/api/send-email.js"
+    },
+    {
+      "source": "/api/test-smtp",
+      "destination": "/api/test-smtp.js"
     }
   ]
 }
