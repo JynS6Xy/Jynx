@@ -58,7 +58,13 @@ export default async function handler(req, res) {
 
     if (action === "complete") {
       const parts = Array.isArray(body.parts) ? body.parts : [];
-      if (!parts.length) return res.status(400).json({ error: "Missing uploaded parts" });
+      if (!parts.length || parts.some((part) => (
+        !Number.isInteger(Number(part.partNumber)) ||
+        Number(part.partNumber) < 1 ||
+        !part.etag
+      ))) {
+        return res.status(400).json({ error: "Missing or invalid uploaded part ETags" });
+      }
       await r2.send(new CompleteMultipartUploadCommand({
         Bucket: r2Bucket, Key: room.objectKey, UploadId: room.uploadId,
         MultipartUpload: { Parts: parts.map(p => ({ PartNumber: Number(p.partNumber), ETag: p.etag })) }
@@ -79,6 +85,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Unknown action" });
   } catch (err) {
     console.error("[JYNX R2] multipart error:", err);
-    return res.status(500).json({ error: "Multipart upload failed" });
+    return res.status(502).json({
+      error: `Multipart upload failed${err?.message ? `: ${err.message}` : ""}`
+    });
   }
 }

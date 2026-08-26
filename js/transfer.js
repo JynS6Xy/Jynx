@@ -334,22 +334,37 @@ class JynxTransferEngine {
     const upload = await initRes.json();
     const bytes = new Uint8Array(encryptedData);
     const parts = [];
-    for (let i = 0; i < upload.urls.length; i++) {
-      const start = i * upload.partSize;
-      const end = Math.min(start + upload.partSize, bytes.byteLength);
-      const response = await fetch(upload.urls[i], {
-        method: "PUT", body: bytes.slice(start, end),
-        headers: { "Content-Type": "application/octet-stream" }
-      });
-      if (!response.ok) throw new Error(`R2 upload failed at part ${i + 1}.`);
-      parts.push({ partNumber: i + 1, etag: response.headers.get("ETag") });
-      onStatus?.(`Uploading to Cloudflare R2... ${Math.round((end / bytes.byteLength) * 100)}%`, "uploading");
+    try {
+      for (let i = 0; i < upload.urls.length; i++) {
+        const start = i * upload.partSize;
+        const end = Math.min(start + upload.partSize, bytes.byteLength);
+        const response = await fetch(upload.urls[i], {
+          method: "PUT", body: bytes.slice(start, end),
+          headers: { "Content-Type": "application/octet-stream" }
+        });
+        if (!response.ok) throw new Error(`R2 upload failed at part ${i + 1} (HTTP ${response.status}).`);
+        const etag = response.headers.get("etag");
+        if (!etag) {
+          throw new Error("R2 did not expose the ETag header. Add ETag to the bucket CORS ExposeHeaders setting.");
+        }
+        parts.push({ partNumber: i + 1, etag });
+        onStatus?.(`Uploading to Cloudflare R2... ${Math.round((end / bytes.byteLength) * 100)}%`, "uploading");
+      }
+    } catch (err) {
+      await fetch(`${this.apiBase}/api/relay/r2`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "abort", code })
+      }).catch(() => {});
+      throw err;
     }
     const completeRes = await fetch(`${this.apiBase}/api/relay/r2`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "complete", code, size: bytes.byteLength, parts })
     });
-    if (!completeRes.ok) throw new Error("Cloudflare R2 multipart completion failed.");
+    if (!completeRes.ok) {
+      const detail = await completeRes.json().catch(() => ({}));
+      throw new Error(detail.error || "Cloudflare R2 multipart completion failed.");
+    }
   }
 
   async startReceive({ code, onProgress, onStatus }) {

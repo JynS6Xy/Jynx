@@ -72,8 +72,9 @@ This repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) th
 
 Transfers larger than 45 MB use browser-to-R2 multipart uploads. Add these Vercel
 environment variables: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
-and `R2_BUCKET`. The R2 bucket must allow CORS `PUT` and `GET` from your Vercel
-origin and expose the `ETag` response header. The existing Upstash Redis
+and `R2_BUCKET`. Configure the R2 bucket CORS policy to allow `PUT` and `GET`
+from your Vercel origin, allow the `Content-Type` request header, and expose
+the `ETag` response header. The existing Upstash Redis
 variables remain required for room metadata persistence.
 
 ---
