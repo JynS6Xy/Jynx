@@ -399,14 +399,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB (Cloudflare R2 multipart limit)
 
     function handleFilesSelected(files) {
       const pendingFiles = [...selectedFiles, ...files];
       const pendingTotalSize = pendingFiles.reduce((acc, f) => acc + f.size, 0);
 
       if (pendingTotalSize > MAX_FILE_SIZE) {
-        alert("File selection exceeds the maximum limit of 50 MB per transfer.");
+        alert("File selection exceeds the maximum limit of 1 GB per transfer.");
         return;
       }
 

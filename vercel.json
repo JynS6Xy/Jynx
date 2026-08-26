@@ -6,6 +6,10 @@
       "destination": "/api/relay/upload.js"
     },
     {
+      "source": "/api/relay/r2",
+      "destination": "/api/relay/r2.js"
+    },
+    {
       "source": "/api/relay/room/:code",
       "destination": "/api/relay/room/[code].js"
     },

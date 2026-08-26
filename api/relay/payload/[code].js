@@ -1,5 +1,8 @@
 // Vercel Serverless Function: GET /api/relay/payload/[code]
 import { redis, roomKey, setCorsHeaders } from "../_redis.js";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { r2, r2Bucket, r2Configured } from "../_r2.js";
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res, "GET, OPTIONS");
@@ -18,6 +21,12 @@ export default async function handler(req, res) {
   const room = await redis.get(key);
 
   if (!room || !room.payload_b64 || Date.now() > room.expiresAt) {
+    if (room && room.r2Status === "complete" && r2Configured && Date.now() <= room.expiresAt) {
+      const downloadUrl = await getSignedUrl(r2, new GetObjectCommand({
+        Bucket: r2Bucket, Key: room.objectKey
+      }), { expiresIn: 3600 });
+      return res.redirect(302, downloadUrl);
+    }
     return res.status(404).json({ error: "Payload not found or expired" });
   }
 

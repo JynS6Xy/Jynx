@@ -159,9 +159,9 @@ class JynxTransferEngine {
         totalBytes += file.size;
       }
 
-      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+      const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB (R2 multipart limit)
       if (totalBytes > MAX_FILE_SIZE) {
-        throw new Error("Selected files exceed maximum size limit of 50 MB.");
+        throw new Error("Selected files exceed maximum size limit of 1 GB.");
       }
 
       manifest = {
@@ -192,7 +192,14 @@ class JynxTransferEngine {
     onStatus?.("Encrypting payload with AES-256-GCM...", "encrypting");
     const encryptedData = await window.jynxCrypto.encrypt(rawBuffer, code);
     const verification = await window.jynxCrypto.getVerificationDigits(code);
-    const payloadB64 = this._uint8ArrayToBase64(encryptedData);
+    const useR2 = encryptedData.byteLength > 45 * 1024 * 1024;
+    let payloadB64 = null;
+
+    if (useR2) {
+      await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus);
+    } else {
+      payloadB64 = this._uint8ArrayToBase64(encryptedData);
+    }
 
     const payloadPackage = {
       code: code,
@@ -204,17 +211,20 @@ class JynxTransferEngine {
     };
 
     // 2. Save locally for instant tab-to-tab mesh
-    try {
-      sessionStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
-      localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
-    } catch (e) {}
+    if (payloadB64) {
+      try {
+        sessionStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
+        localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
+      } catch (e) {}
+    }
 
     onStatus?.("Staging encrypted payload locally...", "staging");
 
     // 3. Upload to Vercel Serverless Relay
     onStatus?.("Uploading to Cloud Relay...", "uploading");
-    let serverlessOk = false;
+    let serverlessOk = useR2;
     try {
+      if (useR2) throw new Error("R2 upload already completed");
       const res = await fetch(`${this.apiBase}/api/relay/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -237,7 +247,7 @@ class JynxTransferEngine {
     onStatus?.("Upload complete. Finalizing...", "staged");
 
     // 4. Publish to Global MQTT Cloud Relay
-    await this._publishToMqttCloud(code, payloadPackage);
+    if (payloadB64) await this._publishToMqttCloud(code, payloadPackage);
 
     // 5. Broadcast to local tabs
     if (this.channel) {
@@ -307,6 +317,41 @@ class JynxTransferEngine {
     return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to_email)}&su=${subject}&body=${body}`;
   }
 
+  async _uploadR2(code, encryptedData, manifest, verification, mode, onStatus) {
+    onStatus?.("Preparing Cloudflare R2 multipart upload...", "uploading");
+    const initRes = await fetch(`${this.apiBase}/api/relay/r2`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "init", code, size: encryptedData.byteLength, manifest, verification,
+        mode, ttl: 86400, max_downloads: 10
+      })
+    });
+    if (!initRes.ok) {
+      const detail = await initRes.json().catch(() => ({}));
+      throw new Error(detail.error || "Cloudflare R2 is not configured for large transfers.");
+    }
+    const upload = await initRes.json();
+    const bytes = new Uint8Array(encryptedData);
+    const parts = [];
+    for (let i = 0; i < upload.urls.length; i++) {
+      const start = i * upload.partSize;
+      const end = Math.min(start + upload.partSize, bytes.byteLength);
+      const response = await fetch(upload.urls[i], {
+        method: "PUT", body: bytes.slice(start, end),
+        headers: { "Content-Type": "application/octet-stream" }
+      });
+      if (!response.ok) throw new Error(`R2 upload failed at part ${i + 1}.`);
+      parts.push({ partNumber: i + 1, etag: response.headers.get("ETag") });
+      onStatus?.(`Uploading to Cloudflare R2... ${Math.round((end / bytes.byteLength) * 100)}%`, "uploading");
+    }
+    const completeRes = await fetch(`${this.apiBase}/api/relay/r2`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "complete", code, size: bytes.byteLength, parts })
+    });
+    if (!completeRes.ok) throw new Error("Cloudflare R2 multipart completion failed.");
+  }
+
   async startReceive({ code, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
     onStatus?.(`Connecting to Global Jynx Relay for room "${code}"...`, "connecting");
@@ -332,9 +377,15 @@ class JynxTransferEngine {
         const roomRes = await fetch(`${this.apiBase}/api/relay/room/${encodeURIComponent(code)}`);
         if (roomRes.ok) {
           const roomMeta = await roomRes.json();
-          const payloadRes = await fetch(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
-          if (payloadRes.ok) {
-            const ab = await payloadRes.arrayBuffer();
+          let ab = null;
+          if (roomMeta.download_url) {
+            const payloadRes = await fetch(roomMeta.download_url);
+            if (payloadRes.ok) ab = await payloadRes.arrayBuffer();
+          } else {
+            const payloadRes = await fetch(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
+            if (payloadRes.ok) ab = await payloadRes.arrayBuffer();
+          }
+          if (ab) {
             payloadPackage = {
               data: this._uint8ArrayToBase64(new Uint8Array(ab)),
               manifest: roomMeta.manifest,
@@ -342,6 +393,7 @@ class JynxTransferEngine {
             };
             break;
           }
+
         }
       } catch (e) {}
 

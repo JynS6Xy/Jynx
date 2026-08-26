@@ -13,6 +13,7 @@
 - **Persistent SQLite Relay Backend**: Zero-config Python server with SQLite storage for cross-device, cross-network transfers with automatic TTL pruning.
 - **Cross-Tab & Local Mesh**: Instant zero-latency peer transfer using `BroadcastChannel` and `localStorage` signaling.
 - **Multiple File & Folder Support**: Drag & drop multi-file archives, individual file removals, and batch downloads.
+- **Cloudflare R2 Multipart Relay**: Encrypted transfers up to 1 GB upload directly from the browser in 10 MB parts, avoiding Vercel request limits.
 - **Confidential Text Composer**: Encrypted secret notes and code snippet sharing.
 - **Dynamic QR Codes**: Instant standalone SVG QR matrix generator for mobile camera scans.
 - **Interactive Visualizers**: Live animated packet flow diagrams and key derivation inspectors.
@@ -66,6 +67,14 @@ This repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) th
 4. **Push once** (`git push origin main`) — the workflow builds and runs `vercel --prod`. Every subsequent push re-deploys automatically. 🚀
 
 > Tip: commit messages containing `[skip ci]` will skip the auto-deploy.
+
+### Cloudflare R2 (large transfers)
+
+Transfers larger than 45 MB use browser-to-R2 multipart uploads. Add these Vercel
+environment variables: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+and `R2_BUCKET`. The R2 bucket must allow CORS `PUT` and `GET` from your Vercel
+origin and expose the `ETag` response header. The existing Upstash Redis
+variables remain required for room metadata persistence.
 
 ---
 
