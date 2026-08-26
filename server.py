@@ -459,15 +459,10 @@ class JynxHandler(BaseHTTPRequestHandler):
 
                 smtp_cfg = get_smtp_credentials(client_smtp)
 
-                # Determine file description
+                # Determine file description (without leaking sensitive file names or contents)
                 if isinstance(manifest, dict) and manifest.get("type") == "files":
                     files_count = manifest.get("filesCount", 1)
-                    total_size = manifest.get("totalSize", 0)
-                    files_list = manifest.get("files", [])
-                    file_names = ", ".join([f.get("name", "") for f in files_list[:3]])
-                    if len(files_list) > 3:
-                        file_names += f" and {len(files_list) - 3} more"
-                    transfer_info = f"Files ({files_count} item{'s' if files_count > 1 else ''}): {file_names}"
+                    transfer_info = f"Encrypted File Package ({files_count} item{'s' if files_count > 1 else ''})"
                 else:
                     transfer_info = "Confidential Encrypted Message"
 

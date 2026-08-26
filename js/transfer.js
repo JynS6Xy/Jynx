@@ -295,7 +295,7 @@ class JynxTransferEngine {
     const subject = encodeURIComponent(`Jynx Transfer Ready: [${code}]`);
     let fileDesc = "Encrypted Confidential Message";
     if (manifest && manifest.type === "files") {
-      fileDesc = `${manifest.filesCount || 1} file(s) (${manifest.files?.[0]?.name || "files"})`;
+      fileDesc = `${manifest.filesCount || 1} encrypted file(s)`;
     }
     const body = encodeURIComponent(
       `Hello,\n\nI have sent you an end-to-end encrypted transfer via Jynx.\n\nPayload: ${fileDesc}\nAuthentication Code: ${code}\nDirect Download Link: ${share_url}\n\nEnter the authentication code on Jynx (or click the link) to decrypt and receive the transfer.\n\nSecured with PAKE AES-256-GCM encryption.`

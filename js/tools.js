@@ -17,21 +17,31 @@ const JYNX_WORDLIST = [
 
 class JynxTools {
   /**
-   * Automatically generates a clean, intended code phrase tied to the specific file(s) or content.
-   * Example: "budget-pdf-4912" or "bundle-3files-8492" or "note-secret-5912"
+   * Automatically generates a secure, opaque code phrase deterministically derived
+   * from the payload without leaking or displaying confidential content or file details.
+   * Example: "7492-velvet-falcon"
    */
   static generateFileCodePhrase(files = [], mode = "files", text = "") {
     if (mode === "text") {
       const cleanText = (text || "").trim();
       if (!cleanText) return "enter-text-to-generate";
-      const snippet = cleanText.slice(0, 14).toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 10) || "msg";
-      let h = 0;
+
+      let h1 = 0;
+      let h2 = 0;
       for (let i = 0; i < cleanText.length; i++) {
-        h = ((h << 5) - h) + cleanText.charCodeAt(i);
-        h |= 0;
+        h1 = ((h1 << 5) - h1) + cleanText.charCodeAt(i);
+        h1 |= 0;
+        h2 = ((h2 << 7) + h2) ^ (cleanText.charCodeAt(i) * 31);
+        h2 |= 0;
       }
-      const num = Math.abs(h % 9000) + 1000;
-      return `note-${snippet}-${num}`;
+      const num = Math.abs(h1 % 9000) + 1000;
+      const wIdx1 = Math.abs(h1) % JYNX_WORDLIST.length;
+      let wIdx2 = Math.abs(h2) % JYNX_WORDLIST.length;
+      if (wIdx2 === wIdx1) wIdx2 = (wIdx1 + 1) % JYNX_WORDLIST.length;
+
+      const word1 = JYNX_WORDLIST[wIdx1];
+      const word2 = JYNX_WORDLIST[wIdx2];
+      return `${num}-${word1}-${word2}`;
     }
 
     // Files or Vault mode
@@ -39,36 +49,27 @@ class JynxTools {
       return "select-files-to-generate";
     }
 
-    if (files.length === 1) {
-      const file = files[0];
-      const namePart = file.name.replace(/\.[^/.]+$/, "");
-      const extPart = (file.name.match(/\.([^.]+)$/) || [])[1] || "";
-      let slug = namePart.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 16);
-      if (!slug) slug = "file";
-      const extSlug = extPart.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5);
-      const base = extSlug ? `${slug}-${extSlug}` : slug;
-
-      let h = 0;
-      const seed = `${file.name}-${file.size}-${file.lastModified || 0}`;
-      for (let i = 0; i < seed.length; i++) {
-        h = ((h << 5) - h) + seed.charCodeAt(i);
-        h |= 0;
-      }
-      const num = Math.abs(h % 9000) + 1000;
-      return `${base}-${num}`;
+    let seed = "";
+    for (const f of files) {
+      seed += `${f.name}:${f.size}:${f.lastModified || 0};`;
     }
 
-    // Multiple files bundle
-    const firstSlug = files[0].name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 10) || "pkg";
-    const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
-    let h = 0;
-    const seed = `bundle-${files.length}-${totalSize}-${files[0].name}`;
+    let h1 = 0;
+    let h2 = 0;
     for (let i = 0; i < seed.length; i++) {
-      h = ((h << 5) - h) + seed.charCodeAt(i);
-      h |= 0;
+      h1 = ((h1 << 5) - h1) + seed.charCodeAt(i);
+      h1 |= 0;
+      h2 = ((h2 << 7) + h2) ^ (seed.charCodeAt(i) * 31);
+      h2 |= 0;
     }
-    const num = Math.abs(h % 9000) + 1000;
-    return `${firstSlug}-${files.length}files-${num}`;
+    const num = Math.abs(h1 % 9000) + 1000;
+    const wIdx1 = Math.abs(h1) % JYNX_WORDLIST.length;
+    let wIdx2 = Math.abs(h2) % JYNX_WORDLIST.length;
+    if (wIdx2 === wIdx1) wIdx2 = (wIdx1 + 1) % JYNX_WORDLIST.length;
+
+    const word1 = JYNX_WORDLIST[wIdx1];
+    const word2 = JYNX_WORDLIST[wIdx2];
+    return `${num}-${word1}-${word2}`;
   }
 
   /**
