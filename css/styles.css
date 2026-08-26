@@ -85,59 +85,46 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus
   padding: 42px 0 32px;
 }
 
-/* Top Banner */
-.donation-banner {
-  border: 1px solid var(--foreground);
+/* Top Notice Banner */
+.notice-banner {
+  border: 1px solid var(--accent);
   background: var(--background);
-  grid-template-columns: 1fr auto;
-  margin-bottom: 26px;
-  display: grid;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  padding: 12px 18px;
 }
 
-.donation-copy {
+.notice-copy {
+  display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
-  padding: 12px 16px;
-  display: flex;
+  width: 100%;
 }
 
-.donation-copy svg {
+.notice-copy svg {
   flex: none;
   width: 18px;
   height: 18px;
   color: var(--accent);
 }
 
-.donation-copy p {
+.notice-copy p {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.donation-copy strong {
-  font-weight: 800;
-}
-
-.donation-banner > a {
-  border-left: 1px solid var(--foreground);
-  color: var(--background);
-  background: var(--foreground);
-  white-space: nowrap;
-  justify-content: center;
-  align-items: center;
-  padding: 0 20px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-decoration: none;
-  display: flex;
-  transition: all 0.15s ease;
-}
-
-.donation-banner > a:hover {
+  font-family: var(--font-mono);
+  font-size: 13px;
   color: var(--foreground);
-  background: var(--background);
+  letter-spacing: 0.02em;
+}
+
+.notice-copy p strong {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.notice-copy .highlight-limit {
+  color: var(--accent);
+  font-weight: 800;
 }
 
 /* Header */
@@ -439,7 +426,110 @@ textarea:focus, input:focus {
   display: flex;
 }
 
+/* Gmail Holder Container */
+.gmail-holder-container {
+  margin-top: 18px;
+  margin-bottom: 14px;
+}
+
+.gmail-holder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.gmail-holder-header .field-label {
+  margin: 0;
+}
+
+.smtp-config-link {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  display: inline-flex;
+  align-items: center;
+}
+
+.smtp-config-link:hover {
+  opacity: 0.8;
+}
+
+.gmail-holder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.gmail-input {
+  border: 1px solid var(--subtle);
+  height: 42px;
+  color: var(--foreground);
+  background: var(--background);
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.gmail-input:focus {
+  border-color: var(--foreground);
+}
+
+.gmail-action-btn {
+  border: 1px solid var(--foreground);
+  height: 42px;
+  padding: 0 16px;
+  color: var(--background);
+  background: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.gmail-action-btn:hover {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.gmail-feedback {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
 /* Code Phrase Display & Input Box */
+.code-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  margin-bottom: 7px;
+}
+
+.code-header-row .field-label {
+  margin: 0;
+}
+
+.field-tag {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
 .field-label {
   letter-spacing: 0.12em;
   text-transform: uppercase;

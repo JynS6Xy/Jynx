@@ -126,7 +126,7 @@ class JynxTransferEngine {
 
   async startSend({ code, mode, files, text, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
-    onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
+    onStatus?.("Preparing payload data...", "encrypting");
 
     let rawBuffer;
     let manifest = {};
@@ -143,11 +143,9 @@ class JynxTransferEngine {
       };
     } else {
       const filesMeta = [];
-      const fileBuffers = [];
       let totalBytes = 0;
 
       for (const file of files) {
-        const buf = await file.arrayBuffer();
         filesMeta.push({
           name: file.name,
           type: file.type || "application/octet-stream",
@@ -155,7 +153,6 @@ class JynxTransferEngine {
           offset: totalBytes,
           lastModified: file.lastModified
         });
-        fileBuffers.push(new Uint8Array(buf));
         totalBytes += file.size;
       }
 
@@ -175,66 +172,112 @@ class JynxTransferEngine {
       combined.set(manifestBytes, 4);
 
       let curOffset = 4 + manifestBytes.byteLength;
-      for (const fBuf of fileBuffers) {
-        combined.set(fBuf, curOffset);
-        curOffset += fBuf.byteLength;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        onStatus?.(`Reading file ${i+1}/${files.length}: ${file.name}...`, "staging");
+        const CHUNK = 4 * 1024 * 1024;
+        let fileOffset = 0;
+        while (fileOffset < file.size) {
+          const slice = file.slice(fileOffset, Math.min(fileOffset + CHUNK, file.size));
+          const sliceBuf = await slice.arrayBuffer();
+          combined.set(new Uint8Array(sliceBuf), curOffset + fileOffset);
+          fileOffset += sliceBuf.byteLength;
+          await new Promise(r => setTimeout(r, 0));
+        }
+        curOffset += file.size;
       }
 
       rawBuffer = combined.buffer;
     }
 
     // 1. WebCrypto AES-256-GCM Encryption
-    onStatus?.("Encrypting payload with AES-256-GCM...", "encrypting");
+    onStatus?.("Encrypting payload with AES-256-GCM in browser...", "encrypting");
+    await new Promise(r => setTimeout(r, 10));
     const encryptedData = await window.jynxCrypto.encrypt(rawBuffer, code);
     const verification = await window.jynxCrypto.getVerificationDigits(code);
-    const payloadB64 = this._uint8ArrayToBase64(encryptedData);
 
-    const payloadPackage = {
-      code: code,
-      manifest: manifest,
-      verification: verification,
-      data: payloadB64,
-      mode: mode,
-      createdAt: Date.now()
-    };
+    const totalEncryptedBytes = encryptedData.byteLength;
 
-    // 2. Save locally for instant tab-to-tab mesh
-    try {
-      sessionStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
-      localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
-    } catch (e) {}
+    // Direct chunked upload for payloads > 10 MB to prevent V8 memory spikes & browser crashes
+    if (totalEncryptedBytes > 10 * 1024 * 1024) {
+      onStatus?.(`Streaming encrypted upload (${JynxTools.formatBytes(totalEncryptedBytes)})...`, "uploading");
+      const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
+      let uploaded = 0;
+      let isFirst = true;
+      const uploadStartTime = performance.now();
 
-    onStatus?.("Staging encrypted payload locally...", "staging");
+      while (uploaded < totalEncryptedBytes) {
+        const end = Math.min(uploaded + UPLOAD_CHUNK_SIZE, totalEncryptedBytes);
+        const chunkSub = encryptedData.subarray(uploaded, end);
+        const isLast = (end === totalEncryptedBytes);
+        const chunkB64 = this._uint8ArrayToBase64(chunkSub);
 
-    // 3. Upload to Vercel Serverless Relay
-    onStatus?.("Uploading to Cloud Relay...", "uploading");
-    let serverlessOk = false;
-    try {
-      const res = await fetch(`${this.apiBase}/api/relay/upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        await fetch(`${this.apiBase}/api/relay/upload-chunk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: code,
+            manifest: manifest,
+            verification: verification,
+            chunk_b64: chunkB64,
+            is_first: isFirst,
+            is_last: isLast,
+            mode: mode,
+            ttl: 86400,
+            max_downloads: 10
+          })
+        });
+
+        isFirst = false;
+        uploaded = end;
+        const elapsedSec = (performance.now() - uploadStartTime) / 1000;
+        const speed = elapsedSec > 0 ? uploaded / elapsedSec : 0;
+        const remainingBytes = totalEncryptedBytes - uploaded;
+        const eta = speed > 0 ? remainingBytes / speed : 0;
+        const percent = Math.round((uploaded / totalEncryptedBytes) * 100);
+        onProgress?.({ transferred: uploaded, totalBytes: totalEncryptedBytes, percent, speed, eta, elapsedSec });
+        onStatus?.(`Streaming chunked payload to relay: ${percent}%`, "uploading");
+        await new Promise(r => setTimeout(r, 0));
+      }
+    } else {
+      const payloadB64 = this._uint8ArrayToBase64(encryptedData);
+      onStatus?.("Uploading encrypted payload to relay...", "uploading");
+      try {
+        await fetch(`${this.apiBase}/api/relay/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: code,
+            manifest: manifest,
+            verification: verification,
+            payload_b64: payloadB64,
+            mode: mode,
+            ttl: 86400,
+            max_downloads: 10
+          })
+        });
+      } catch (e) {}
+
+      // Cache small payloads locally for tab-to-tab mesh
+      if (totalEncryptedBytes < 5 * 1024 * 1024) {
+        const payloadPackage = {
           code: code,
           manifest: manifest,
           verification: verification,
-          payload_b64: payloadB64,
+          data: payloadB64,
           mode: mode,
-          ttl: 86400,
-          max_downloads: 10
-        })
-      });
-      if (res.ok) {
-        serverlessOk = true;
-        console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
+          createdAt: Date.now()
+        };
+        try {
+          sessionStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
+          localStorage.setItem(`jynx_payload_${code}`, JSON.stringify(payloadPackage));
+        } catch (e) {}
+
+        await this._publishToMqttCloud(code, payloadPackage);
       }
-    } catch (e) {}
+    }
 
-    onStatus?.("Upload complete. Finalizing...", "staged");
-
-    // 4. Publish to Global MQTT Cloud Relay
-    await this._publishToMqttCloud(code, payloadPackage);
-
-    // 5. Broadcast to local tabs
+    // Broadcast to local tabs
     if (this.channel) {
       this.channel.postMessage({
         type: "JYNX_ROOM_ANNOUNCE",
@@ -243,7 +286,7 @@ class JynxTransferEngine {
       });
     }
 
-    onStatus?.(`Ready on Global Relay! Share code: ${code} (Verification: ${verification})`, "ready");
+    onStatus?.(`Ready on Relay! Share code: ${code} (Verification: ${verification})`, "ready");
 
     return {
       manifest,
@@ -255,16 +298,16 @@ class JynxTransferEngine {
 
   async startReceive({ code, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
-    onStatus?.(`Connecting to Global Jynx Relay for room "${code}"...`, "connecting");
+    onStatus?.(`Connecting to Jynx Relay for room "${code}"...`, "connecting");
 
     let payloadPackage = null;
-    const maxAttempts = 15; // Poll for up to 30 seconds if sender is still uploading
+    const maxAttempts = 15;
     let attempt = 0;
 
     while (attempt < maxAttempts && !payloadPackage) {
       attempt++;
 
-      // Strategy 1: Local Session Mesh (Instant)
+      // Strategy 1: Local Session Mesh
       try {
         const stored = sessionStorage.getItem(`jynx_payload_${code}`) || localStorage.getItem(`jynx_payload_${code}`);
         if (stored) {
@@ -273,7 +316,7 @@ class JynxTransferEngine {
         }
       } catch (e) {}
 
-      // Strategy 2: Vercel Serverless REST API
+      // Strategy 2: Server REST API Stream
       try {
         const roomRes = await fetch(`${this.apiBase}/api/relay/room/${encodeURIComponent(code)}`);
         if (roomRes.ok) {
@@ -282,7 +325,7 @@ class JynxTransferEngine {
           if (payloadRes.ok) {
             const ab = await payloadRes.arrayBuffer();
             payloadPackage = {
-              data: this._uint8ArrayToBase64(new Uint8Array(ab)),
+              rawBytes: new Uint8Array(ab),
               manifest: roomMeta.manifest,
               verification: roomMeta.verification
             };
@@ -298,19 +341,25 @@ class JynxTransferEngine {
       }
 
       if (!payloadPackage && attempt < maxAttempts) {
-        onStatus?.(`Searching for sender room "${code}" on relay... (Attempt ${attempt}/${maxAttempts})`, "handshake");
+        onStatus?.(`Searching for room "${code}"... (Attempt ${attempt}/${maxAttempts})`, "handshake");
         await new Promise(r => setTimeout(r, 1800));
       }
     }
 
-    if (!payloadPackage || !payloadPackage.data) {
+    if (!payloadPackage || (!payloadPackage.data && !payloadPackage.rawBytes)) {
       throw new Error(
         `Room "${code}" not found. Please ensure the sender clicked "SEND ENCRYPTED TEXT" or "SEND FILES" to open the transfer room.`
       );
     }
 
-    // Decrypt and unpack
-    const encryptedBytes = this._base64ToUint8Array(payloadPackage.data);
+    // Decrypt and unpack without unnecessary string allocations
+    let encryptedBytes;
+    if (payloadPackage.rawBytes) {
+      encryptedBytes = payloadPackage.rawBytes;
+    } else {
+      encryptedBytes = this._base64ToUint8Array(payloadPackage.data);
+    }
+
     const totalBytes = encryptedBytes.byteLength;
     const chunkSize = 64 * 1024;
     let transferred = 0;
@@ -328,11 +377,11 @@ class JynxTransferEngine {
       const eta = speed > 0 ? remainingBytes / speed : 0;
 
       onProgress?.({ transferred, totalBytes, percent, speed, eta, elapsedSec });
-      await new Promise(r => setTimeout(r, 20));
+      await new Promise(r => setTimeout(r, 15));
     }
 
     onStatus?.("Decrypting AES-256-GCM payload in browser...", "decrypting");
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 50));
 
     let decryptedBuffer;
     try {
@@ -383,12 +432,16 @@ class JynxTransferEngine {
   }
 
   _uint8ArrayToBase64(uint8) {
-    let binary = "";
-    const len = uint8.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(uint8[i]);
+    const CHUNK_SIZE = 0x8000; // 32KB chunks to prevent stack overflow & UI freeze
+    let index = 0;
+    const length = uint8.length;
+    let result = '';
+    while (index < length) {
+      const slice = uint8.subarray(index, Math.min(index + CHUNK_SIZE, length));
+      result += String.fromCharCode.apply(null, slice);
+      index += CHUNK_SIZE;
     }
-    return window.btoa(binary);
+    return window.btoa(result);
   }
 
   _base64ToUint8Array(base64) {

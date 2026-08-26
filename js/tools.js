@@ -63,12 +63,35 @@ class JynxTools {
   }
 
   /**
-   * Standalone SVG QR Code Matrix Generator
-   * Encodes standard URLs / alphanumeric text into a crisp vector QR code
+   * Standalone High-Contrast SVG QR Code Matrix Generator
+   * Integrates qrcode-generator JS engine with ISO/IEC 18004 error correction.
    */
   static generateQRCodeSVG(text, size = 200) {
-    // Generates a robust QR code SVG using lightweight visual encoding
-    const modules = this._createQRMatrix(text);
+    let modules = null;
+
+    if (typeof window.qrcode === "function") {
+      try {
+        const qr = window.qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        const count = qr.getModuleCount();
+        modules = [];
+        for (let r = 0; r < count; r++) {
+          const row = [];
+          for (let c = 0; c < count; c++) {
+            row.push(qr.isDark(r, c));
+          }
+          modules.push(row);
+        }
+      } catch (e) {
+        console.warn("[JYNX QR] CDN Generator fallback triggered:", e);
+      }
+    }
+
+    if (!modules) {
+      modules = this._createQRMatrix(text);
+    }
+
     const moduleCount = modules.length;
     const cellSize = size / moduleCount;
 
@@ -78,9 +101,9 @@ class JynxTools {
         if (modules[r][c]) {
           const x = (c * cellSize).toFixed(2);
           const y = (r * cellSize).toFixed(2);
-          const w = cellSize.toFixed(2);
-          const h = cellSize.toFixed(2);
-          rects += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="currentColor" />`;
+          const w = (cellSize + 0.05).toFixed(2);
+          const h = (cellSize + 0.05).toFixed(2);
+          rects += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000000" />`;
         }
       }
     }

@@ -50,19 +50,16 @@
 <body>
   <div class="site-shell">
 
-    <!-- Top Sponsor / Announcement Banner -->
-    <div class="donation-banner">
-      <div class="donation-copy">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-          stroke-linejoin="round">
-          <path
-            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
-          </path>
+    <!-- Top Size Limit Notice Banner -->
+    <div class="notice-banner">
+      <div class="notice-copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
         </svg>
-        <p>Help keep <strong>Jynx</strong> decentralized, ad-free, and open source — <strong>Sponsor the
-            project</strong></p>
+        <p><strong>NOTICE:</strong> Maximum file size limit is <span class="highlight-limit">1 GB</span> per transfer.</p>
       </div>
-      <a href="#cli-section">GET JYNX CLI &rarr;</a>
     </div>
 
     <!-- Site Header -->
@@ -156,7 +153,7 @@
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
           <strong>Choose files or drag here</strong>
-          <small>Supports multiple files, folders & any size</small>
+          <small>Supports multiple files & folders (Max 1 GB total)</small>
         </div>
 
         <!-- Files Selection Summary & List -->
@@ -179,9 +176,31 @@
           Vault mode stages encrypted payload on the relay for asynchronous retrieval within 24 hours.
         </div>
 
+        <!-- Receiver Email / Gmail Notification Holder -->
+        <div id="gmail-holder-container" class="gmail-holder-container">
+          <div class="gmail-holder-header">
+            <span class="field-label">RECEIVER EMAIL / GMAIL (OPTIONAL)</span>
+            <button type="button" id="smtp-config-btn" class="smtp-config-link">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;display:inline-block;vertical-align:-1px;margin-right:3px;">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              Configure Gmail / SMTP
+            </button>
+          </div>
+          <div class="gmail-holder-row">
+            <input type="email" id="receiver-email-input" class="gmail-input" placeholder="e.g. joemrflores449@gmail.com" autocomplete="email" value="joemrflores449@gmail.com" />
+            <button type="button" id="open-gmail-btn" class="gmail-action-btn">OPEN GMAIL</button>
+          </div>
+          <div id="gmail-status-feedback" class="gmail-feedback" style="display:none;"></div>
+        </div>
+
         <!-- Code Phrase Display & Refresh -->
         <div id="send-code-container">
-          <span class="field-label">Authentication Code Phrase</span>
+          <div class="code-header-row">
+            <span class="field-label">Authentication Code Phrase</span>
+            <span class="field-tag">[AUTO-GENERATED FOR INTENDED FILE]</span>
+          </div>
           <div class="send-code">
             <span class="send-code-label">Code:</span>
             <div id="send-code-val" class="send-code-value">7492-velvet-falcon</div>
@@ -217,7 +236,7 @@
           style="margin-top: 10px; font-size:10.5px; min-height:36px;">SHOW QR CODE</button>
         <div id="share-qr-wrapper" class="share-qr-region" style="display: none;">
           <div id="share-qr-svg" class="share-qr-code"></div>
-          <p>Scan with your mobile camera to receive files instantly</p>
+          <p id="share-qr-url-hint">Scan with your mobile camera to receive files instantly</p>
         </div>
 
         <!-- Live Sending Progress & Status -->
@@ -366,7 +385,7 @@
         </svg>
         <span>
           <strong>Self-Hosted Relay</strong>
-          <small>Docker & Go server</small>
+          <small>Python server</small>
         </span>
       </a>
     </section>
@@ -391,7 +410,6 @@
             <button type="button" class="cli-install-tab" data-method="winget">WinGet</button>
             <button type="button" class="cli-install-tab" data-method="scoop">Scoop</button>
             <button type="button" class="cli-install-tab" data-method="npm">NPM</button>
-            <button type="button" class="cli-install-tab" data-method="docker">Docker</button>
           </div>
           <div class="cli-command-row">
             <code id="cli-install-command">curl -sL https://getjynx.dev/install.sh | bash</code>
@@ -661,6 +679,7 @@
   </div>
 
   <!-- Global Cloud Relay & P2P Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script src="https://unpkg.com/mqtt@5.6.1/dist/mqtt.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 

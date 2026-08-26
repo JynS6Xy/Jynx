@@ -131,14 +131,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (codeValEl) codeValEl.textContent = currentCode;
 
+    // Build LAN IP URL for QR code when running on localhost so mobile cameras can scan & connect!
+    let qrHostOrigin = window.location.origin;
+    if (
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
+      window.jynxLanIp && window.jynxLanIp !== "127.0.0.1"
+    ) {
+      const port = window.location.port ? `:${window.location.port}` : "";
+      qrHostOrigin = `${window.location.protocol}//${window.jynxLanIp}${port}`;
+    }
+
     const fullUrl = `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(currentCode)}`;
+    const qrUrl = `${qrHostOrigin}${window.location.pathname}?code=${encodeURIComponent(currentCode)}`;
+
     if (shareInput) shareInput.value = fullUrl;
     if (cliPreview) cliPreview.textContent = currentCode;
 
-    // Update QR Code
+    // Update QR Code & Mobile Hint
     const qrRegion = document.getElementById("share-qr-svg");
+    const qrHint = document.getElementById("share-qr-url-hint");
     if (qrRegion) {
-      qrRegion.innerHTML = JynxTools.generateQRCodeSVG(fullUrl, 200);
+      qrRegion.innerHTML = JynxTools.generateQRCodeSVG(qrUrl, 200);
+    }
+    if (qrHint) {
+      qrHint.textContent = `Scan with mobile camera • ${qrUrl}`;
     }
   }
 
@@ -309,6 +325,27 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
+    // Gmail Holder & Notification Handler
+    const openGmailBtn = document.getElementById("open-gmail-btn");
+    const smtpConfigBtn = document.getElementById("smtp-config-btn");
+
+    if (openGmailBtn) {
+      openGmailBtn.addEventListener("click", () => {
+        sendGmailNotification(currentCode, true);
+      });
+    }
+
+    if (smtpConfigBtn) {
+      smtpConfigBtn.addEventListener("click", () => {
+        const settingsDetails = document.getElementById("settings-details");
+        if (settingsDetails) {
+          settingsDetails.open = true;
+          settingsDetails.scrollIntoView({ behavior: "smooth" });
+        }
+        window.jynxSettings?.playSound("click");
+      });
+    }
+
     // QR Code toggle modal
     const qrToggleBtn = document.getElementById("qr-toggle-btn");
     const qrRegion = document.getElementById("share-qr-wrapper");
@@ -343,6 +380,76 @@ document.addEventListener("DOMContentLoaded", () => {
       sendBtn.disabled = !hasText;
       sendBtn.textContent = hasText ? "SEND ENCRYPTED TEXT" : "ENTER TEXT TO SEND";
     }
+  }
+
+  async function sendGmailNotification(code, openComposer = true) {
+    const receiverEmailInput = document.getElementById("receiver-email-input");
+    const gmailFeedbackEl = document.getElementById("gmail-status-feedback");
+    const openGmailBtn = document.getElementById("open-gmail-btn");
+    const receiverEmail = receiverEmailInput ? receiverEmailInput.value.trim() : "";
+
+    if (!receiverEmail) {
+      if (gmailFeedbackEl) {
+        gmailFeedbackEl.style.display = "block";
+        gmailFeedbackEl.style.color = "var(--danger)";
+        gmailFeedbackEl.textContent = "Please enter a valid receiver email address.";
+      }
+      return false;
+    }
+
+    const shareUrl = `${window.location.origin}/?code=${encodeURIComponent(code)}`;
+    if (openGmailBtn) {
+      openGmailBtn.disabled = true;
+      openGmailBtn.textContent = "SENDING...";
+    }
+
+    let smtpSent = false;
+    try {
+      const resp = await fetch("/api/relay/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to_email: receiverEmail,
+          code: code,
+          note: "Encrypted file transfer ready on Jynx Zero-Knowledge Relay",
+          download_link: shareUrl
+        })
+      });
+
+      const data = await resp.json();
+      if (data && data.success) {
+        smtpSent = true;
+        if (gmailFeedbackEl) {
+          gmailFeedbackEl.style.display = "block";
+          gmailFeedbackEl.style.color = "var(--accent)";
+          gmailFeedbackEl.textContent = `✓ Transfer code (${code}) sent via email to ${receiverEmail}`;
+        }
+        window.jynxSettings?.playSound("success");
+      } else {
+        if (gmailFeedbackEl) {
+          gmailFeedbackEl.style.display = "block";
+          gmailFeedbackEl.style.color = "var(--accent)";
+          gmailFeedbackEl.textContent = `✓ Gmail compose initialized for ${receiverEmail} (Code: ${code})`;
+        }
+      }
+    } catch (err) {
+      if (gmailFeedbackEl) {
+        gmailFeedbackEl.style.display = "block";
+        gmailFeedbackEl.style.color = "var(--accent)";
+        gmailFeedbackEl.textContent = `✓ Gmail compose initialized for ${receiverEmail} (Code: ${code})`;
+      }
+    } finally {
+      if (openGmailBtn) {
+        openGmailBtn.disabled = false;
+        openGmailBtn.textContent = "OPEN GMAIL";
+      }
+
+      if (openComposer || !smtpSent) {
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(receiverEmail)}&su=${encodeURIComponent(`Jynx Secure Transfer Code: ${code}`)}&body=${encodeURIComponent(`Here is your Jynx secure file transfer authentication code:\n\nAuthentication Code: ${code}\nDirect Link: ${shareUrl}\n\nEnter this code phrase at ${window.location.origin} to establish the zero-knowledge encrypted tunnel.`)}`;
+        window.open(gmailUrl, "_blank", "noopener,noreferrer");
+      }
+    }
+    return true;
   }
 
   async function handleSend() {
@@ -390,6 +497,12 @@ document.addEventListener("DOMContentLoaded", () => {
           Ready on relay. Share code: <strong>${currentCode}</strong> (Verification: <strong>${result.verification}</strong>)
         `;
         sendStatus.className = "status-message done";
+      }
+
+      // Auto-dispatch recipient email notification if recipient email address is entered in Gmail holder
+      const receiverEmailInput = document.getElementById("receiver-email-input");
+      if (receiverEmailInput && receiverEmailInput.value.trim()) {
+        await sendGmailNotification(currentCode, false);
       }
     } catch (err) {
       window.jynxSettings?.playSound("error");
@@ -573,8 +686,7 @@ document.addEventListener("DOMContentLoaded", () => {
       brew: "brew install jynx",
       winget: "winget install jynx-cli",
       scoop: "scoop install jynx",
-      npm: "npm install -g jynx-cli",
-      docker: "docker run -it --rm jynx/relay"
+      npm: "npm install -g jynx-cli"
     };
 
     cliTabs.forEach(tab => {
@@ -681,6 +793,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/relay/stats");
       if (res.ok) {
         const stats = await res.json();
+        if (stats.lan_ip && window.jynxLanIp !== stats.lan_ip) {
+          window.jynxLanIp = stats.lan_ip;
+          updateCodeDisplay();
+        }
         if (badge) {
           badge.innerHTML = `<span class="status-indicator"></span> <span>DATABASE RELAY: ONLINE (SQLite &bull; ${stats.active_rooms} active room${stats.active_rooms === 1 ? '' : 's'})</span>`;
           badge.style.color = "var(--accent)";
