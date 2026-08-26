@@ -21,7 +21,11 @@ export default async function handler(req, res) {
       auth: { user, pass }
     });
     await transporter.verify();
-    return res.status(200).json({ status: "READY", sender: user });
+    return res.status(200).json({
+      status: "SUCCESS",
+      message: `SMTP connection verified for ${user}`,
+      sender: user
+    });
   } catch (err) {
     console.error("[JYNX EMAIL] SMTP verification failed:", err);
     return res.status(502).json({ error: "SMTP connection failed. Check the host, port, Gmail address, and App Password." });

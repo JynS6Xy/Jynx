@@ -282,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
             body: JSON.stringify({ smtp_config: config })
           });
           const data = await res.json();
-          if (res.ok && data.status === "SUCCESS") {
+          if (res.ok && (data.status === "SUCCESS" || data.status === "READY")) {
             if (statusEl) {
               statusEl.innerHTML = '<span style="color:var(--accent);">✓ ' + escapeHtml(data.message) + '</span>';
             }
