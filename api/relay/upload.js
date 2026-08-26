@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
     // Check payload size in bytes (base64 string length * 3/4 approx)
     const MAX_B64_LEN = Math.ceil(50 * 1024 * 1024 * 4 / 3);
-    if (payload_b64.length > MAX_B64_LEN + 1000) {
+    if (payload_b64 && payload_b64.length > MAX_B64_LEN + 1000) {
       return res.status(400).json({ error: "Payload exceeds maximum size limit of 50 MB" });
     }
 
