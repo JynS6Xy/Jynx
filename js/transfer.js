@@ -403,7 +403,6 @@ class JynxTransferEngine {
     try {
       const concurrency = Math.min(6, upload.urls.length);
       let nextPart = 0;
-      let completedBytes = 0;
       const uploadedBytes = new Array(upload.urls.length).fill(0);
       const reportUploadProgress = () => {
         const transferred = uploadedBytes.reduce((sum, value) => sum + value, 0);
@@ -427,6 +426,7 @@ class JynxTransferEngine {
             throw new Error(`R2 returned an invalid signed URL for part ${index + 1}.`);
           }
           try {
+            uploadedBytes[index] = 0;
             const response = await this._uploadR2Part(
               upload.urls[index],
               payloadBlob.slice(start, end),
@@ -449,18 +449,8 @@ class JynxTransferEngine {
               `R2 part ${index + 1} failed from ${window.location.origin}: ${err.message}`
             );
           }
-          completedBytes += end - start;
-          const elapsedSec = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
-          const speed = completedBytes / elapsedSec;
-          onProgress?.({
-            transferred: completedBytes,
-            totalBytes: payloadBlob.size,
-            percent: Math.round((completedBytes / payloadBlob.size) * 100),
-            speed,
-            eta: speed > 0 ? (payloadBlob.size - completedBytes) / speed : 0,
-            elapsedSec
-          });
-          onStatus?.(`Uploading to Cloudflare R2... ${Math.round((completedBytes / payloadBlob.size) * 100)}%`, "uploading");
+          const transferred = uploadedBytes.reduce((sum, value) => sum + value, 0);
+          onStatus?.(`Uploading encrypted data to Cloudflare R2... ${Math.round((transferred / payloadBlob.size) * 100)}%`, "uploading");
         }
       };
       await Promise.all(Array.from({ length: concurrency }, () => uploadPart()));
@@ -480,6 +470,15 @@ class JynxTransferEngine {
       const detail = await completeRes.json().catch(() => ({}));
       throw new Error(detail.error || "Cloudflare R2 multipart completion failed.");
     }
+    const elapsedSec = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
+    onProgress?.({
+      transferred: payloadBlob.size,
+      totalBytes: payloadBlob.size,
+      percent: 100,
+      speed: payloadBlob.size / elapsedSec,
+      eta: 0,
+      elapsedSec
+    });
   }
 
   async _uploadR2Part(url, body, onProgress, onRetry, attempts = 3) {
