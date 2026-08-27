@@ -382,6 +382,20 @@ class JynxTransferEngine {
       const concurrency = Math.min(6, upload.urls.length);
       let nextPart = 0;
       let completedBytes = 0;
+      const uploadedBytes = new Array(upload.urls.length).fill(0);
+      const reportUploadProgress = () => {
+        const transferred = uploadedBytes.reduce((sum, value) => sum + value, 0);
+        const elapsedSec = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
+        const speed = transferred / elapsedSec;
+        onProgress?.({
+          transferred,
+          totalBytes: payloadBlob.size,
+          percent: Math.min(99, Math.round((transferred / payloadBlob.size) * 100)),
+          speed,
+          eta: speed > 0 ? (payloadBlob.size - transferred) / speed : 0,
+          elapsedSec
+        });
+      };
       const uploadPart = async () => {
         while (nextPart < upload.urls.length) {
           const index = nextPart++;
@@ -390,24 +404,28 @@ class JynxTransferEngine {
           if (!upload.urls[index] || !/^https:\/\//i.test(upload.urls[index])) {
             throw new Error(`R2 returned an invalid signed URL for part ${index + 1}.`);
           }
-          let response;
           try {
-            response = await fetch(upload.urls[index], {
-              method: "PUT",
-              mode: "cors",
-              body: payloadBlob.slice(start, end)
-            });
+            const response = await this._uploadR2Part(
+              upload.urls[index],
+              payloadBlob.slice(start, end),
+              (loaded) => {
+                uploadedBytes[index] = loaded;
+                reportUploadProgress();
+              }
+            );
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            uploadedBytes[index] = end - start;
+            reportUploadProgress();
+            const etag = response.headers.get("etag");
+            if (!etag) {
+              throw new Error("R2 did not expose the ETag header. Add ETag to the bucket CORS ExposeHeaders setting.");
+            }
+            parts[index] = { partNumber: index + 1, etag };
           } catch (err) {
             throw new Error(
-              `R2 part ${index + 1} could not be reached from ${window.location.origin}. Check R2 CORS allows PUT from this exact origin and that the R2 endpoint is reachable.`
+              `R2 part ${index + 1} failed from ${window.location.origin}: ${err.message}`
             );
           }
-          if (!response.ok) throw new Error(`R2 upload failed at part ${index + 1} (HTTP ${response.status}).`);
-          const etag = response.headers.get("etag");
-          if (!etag) {
-            throw new Error("R2 did not expose the ETag header. Add ETag to the bucket CORS ExposeHeaders setting.");
-          }
-          parts[index] = { partNumber: index + 1, etag };
           completedBytes += end - start;
           const elapsedSec = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
           const speed = completedBytes / elapsedSec;
@@ -430,6 +448,7 @@ class JynxTransferEngine {
       }).catch(() => {});
       throw err;
     }
+
     const completeRes = await fetch(`${this.apiBase}/api/relay/r2`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "complete", code, size: payloadBlob.size, parts })
@@ -438,6 +457,24 @@ class JynxTransferEngine {
       const detail = await completeRes.json().catch(() => ({}));
       throw new Error(detail.error || "Cloudflare R2 multipart completion failed.");
     }
+  }
+
+  _uploadR2Part(url, body, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.timeout = 180000;
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded);
+      };
+      xhr.onload = () => resolve(new Response("", {
+        status: xhr.status,
+        headers: { ETag: xhr.getResponseHeader("ETag") || "" }
+      }));
+      xhr.onerror = () => reject(new Error("network or CORS error"));
+      xhr.ontimeout = () => reject(new Error("upload timed out"));
+      xhr.send(body);
+    });
   }
 
   async startReceive({ code, onProgress, onStatus }) {
