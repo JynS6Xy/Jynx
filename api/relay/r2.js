@@ -40,12 +40,12 @@ export default async function handler(req, res) {
         ContentType: "application/octet-stream"
       }));
       const partCount = Math.ceil(size / PART_SIZE);
-      const urls = [];
-      for (let partNumber = 1; partNumber <= partCount; partNumber++) {
-        urls.push(await getSignedUrl(r2, new UploadPartCommand({
+      const urls = await Promise.all(Array.from({ length: partCount }, (_, index) => {
+        const partNumber = index + 1;
+        return getSignedUrl(r2, new UploadPartCommand({
           Bucket: r2Bucket, Key: key, UploadId: created.UploadId, PartNumber: partNumber
-        }), { expiresIn: 3600 }));
-      }
+        }), { expiresIn: 3600 });
+      }));
       const ttl = Math.min(Number(body.ttl) || 86400, 86400 * 7);
       await redis.set(roomKey(code), {
         code, manifest: body.manifest || {}, verification: body.verification || "",

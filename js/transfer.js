@@ -335,23 +335,23 @@ class JynxTransferEngine {
     if (!Array.isArray(upload.urls) || !upload.partSize) {
       throw new Error("R2 returned an invalid multipart upload plan.");
     }
-    const bytes = new Uint8Array(encryptedData);
+    const payloadBlob = new Blob([encryptedData], { type: "application/octet-stream" });
     const parts = [];
     try {
-      const concurrency = Math.min(4, upload.urls.length);
+      const concurrency = Math.min(6, upload.urls.length);
       let nextPart = 0;
       let completedBytes = 0;
       const uploadPart = async () => {
         while (nextPart < upload.urls.length) {
           const index = nextPart++;
           const start = index * upload.partSize;
-          const end = Math.min(start + upload.partSize, bytes.byteLength);
+          const end = Math.min(start + upload.partSize, payloadBlob.size);
           let response;
           try {
             response = await fetch(upload.urls[index], {
               method: "PUT",
               mode: "cors",
-              body: bytes.slice(start, end)
+              body: payloadBlob.slice(start, end)
             });
           } catch (err) {
             throw new Error(
@@ -365,7 +365,7 @@ class JynxTransferEngine {
           }
           parts[index] = { partNumber: index + 1, etag };
           completedBytes += end - start;
-          onStatus?.(`Uploading to Cloudflare R2... ${Math.round((completedBytes / bytes.byteLength) * 100)}%`, "uploading");
+          onStatus?.(`Uploading to Cloudflare R2... ${Math.round((completedBytes / payloadBlob.size) * 100)}%`, "uploading");
         }
       };
       await Promise.all(Array.from({ length: concurrency }, () => uploadPart()));
@@ -378,7 +378,7 @@ class JynxTransferEngine {
     }
     const completeRes = await fetch(`${this.apiBase}/api/relay/r2`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "complete", code, size: bytes.byteLength, parts })
+      body: JSON.stringify({ action: "complete", code, size: payloadBlob.size, parts })
     });
     if (!completeRes.ok) {
       const detail = await completeRes.json().catch(() => ({}));
