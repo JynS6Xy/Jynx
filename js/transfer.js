@@ -234,7 +234,7 @@ class JynxTransferEngine {
     }
   }
 
-  async startSend({ code, mode, files, text, receiverEmail, onProgress, onStatus }) {
+  async startSend({ code, mode, transport = "relay", files, text, receiverEmail, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
     onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
 
@@ -314,7 +314,7 @@ class JynxTransferEngine {
       elapsedSec: 0
     });
 
-    if (useR2) {
+    if (transport === "nearby") {
       const direct = await this._tryDirectSend(code, encryptedData, manifest, verification, onProgress, onStatus);
       if (direct) {
         onProgress?.({
@@ -327,9 +327,17 @@ class JynxTransferEngine {
         });
       } else {
         resetUploadProgress();
-        onStatus?.("Direct transfer unavailable. Using Cloudflare R2 relay...", "uploading");
-        await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
+        if (useR2) {
+          onStatus?.("Direct transfer unavailable. Using Cloudflare R2 relay...", "uploading");
+          await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
+        } else {
+          onStatus?.("Direct transfer unavailable. Using secure relay...", "uploading");
+          payloadB64 = this._uint8ArrayToBase64(encryptedData);
+        }
       }
+    } else if (useR2) {
+      onStatus?.("Uploading encrypted data to Cloudflare R2...", "uploading");
+      await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
     } else {
       resetUploadProgress();
       payloadB64 = this._uint8ArrayToBase64(encryptedData);
