@@ -51,6 +51,7 @@ export default async function handler(req, res) {
         code, manifest: body.manifest || {}, verification: body.verification || "",
         payloadSize: size,
         mode: body.mode || "files", objectKey: key, uploadId: created.UploadId,
+        partCount,
         r2Status: "uploading", createdAt: Date.now(), expiresAt: Date.now() + ttl * 1000,
         downloads: 0, max_downloads: body.max_downloads || 10
       }, { ex: ttl });
@@ -64,12 +65,16 @@ export default async function handler(req, res) {
 
     if (action === "complete") {
       const parts = Array.isArray(body.parts) ? body.parts : [];
-      if (!parts.length || parts.some((part) => (
+      const expectedPartCount = Number(room.partCount);
+      const sortedParts = [...parts].sort((a, b) => Number(a.partNumber) - Number(b.partNumber));
+      if (!Number.isSafeInteger(expectedPartCount) || parts.length !== expectedPartCount ||
+          sortedParts.some((part, index) => Number(part.partNumber) !== index + 1) ||
+          parts.some((part) => (
         !Number.isInteger(Number(part.partNumber)) ||
         Number(part.partNumber) < 1 ||
         !part.etag
       ))) {
-        return res.status(400).json({ error: "Missing or invalid uploaded part ETags" });
+        return res.status(400).json({ error: "Missing, duplicate, or invalid uploaded part ETags" });
       }
       await r2.send(new CompleteMultipartUploadCommand({
         Bucket: r2Bucket, Key: room.objectKey, UploadId: room.uploadId,

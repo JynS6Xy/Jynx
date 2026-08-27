@@ -467,10 +467,10 @@ class JynxTransferEngine {
           const roomMeta = await roomRes.json();
           let ab = null;
           if (roomMeta.download_url) {
-            const payloadRes = await fetch(roomMeta.download_url);
+            const payloadRes = await this._fetchWithRetry(roomMeta.download_url);
             if (payloadRes.ok) ab = await this._readDownload(payloadRes, onProgress, onStatus);
           } else {
-            const payloadRes = await fetch(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
+            const payloadRes = await this._fetchWithRetry(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
             if (payloadRes.ok) ab = await this._readDownload(payloadRes, onProgress, onStatus);
           }
           if (ab) {
@@ -613,7 +613,8 @@ class JynxTransferEngine {
       return buffer;
     }
     const reader = response.body.getReader();
-    const chunks = [];
+    const chunks = totalBytes ? null : [];
+    const result = totalBytes ? new Uint8Array(totalBytes) : null;
     let transferred = 0;
     const startedAt = performance.now();
     let chunksSinceYield = 0;
@@ -621,7 +622,14 @@ class JynxTransferEngine {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(value);
+      if (result) {
+        if (transferred + value.byteLength > result.byteLength) {
+          throw new Error("Downloaded payload exceeded its advertised size.");
+        }
+        result.set(value, transferred);
+      } else {
+        chunks.push(value);
+      }
       transferred += value.byteLength;
       chunksSinceYield++;
       if (chunksSinceYield >= 32) {
@@ -633,18 +641,24 @@ class JynxTransferEngine {
       const percent = totalBytes ? Math.min(100, Math.round((transferred / totalBytes) * 100)) : 0;
       onProgress?.({ transferred, totalBytes, percent, speed, eta: speed && totalBytes ? Math.max(0, (totalBytes - transferred) / speed) : 0, elapsedSec });
     }
-    const result = new Uint8Array(transferred);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.byteLength;
-      if (offset > 0 && offset % (32 * 1024 * 1024) < chunk.byteLength) {
-        await new Promise(resolve => setTimeout(resolve, 0));
+    if (!result) {
+      const assembled = new Uint8Array(transferred);
+      let offset = 0;
+      for (const chunk of chunks) {
+        assembled.set(chunk, offset);
+        offset += chunk.byteLength;
+        if (offset > 0 && offset % (32 * 1024 * 1024) < chunk.byteLength) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
+      return assembled.buffer;
+    }
+    if (transferred !== result.byteLength) {
+      throw new Error(`Incomplete download: received ${transferred} of ${result.byteLength} bytes.`);
     }
     onProgress?.({
       transferred,
-      totalBytes: totalBytes || transferred,
+      totalBytes: result.byteLength,
       percent: 100,
       speed: transferred / Math.max((performance.now() - startedAt) / 1000, 0.001),
       eta: 0,
@@ -653,6 +667,22 @@ class JynxTransferEngine {
     return result.buffer;
   }
 
+  async _fetchWithRetry(url, attempts = 3) {
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const response = await fetch(url);
+        if (response.ok || (response.status >= 400 && response.status < 500)) return response;
+        lastError = new Error(`Download returned HTTP ${response.status}.`);
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt < attempts) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 750));
+      }
+    }
+    throw lastError || new Error("Download failed.");
+  }
   _uint8ArrayToBase64(uint8) {
     let binary = "";
     const len = uint8.byteLength;
