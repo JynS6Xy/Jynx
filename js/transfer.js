@@ -414,10 +414,10 @@ class JynxTransferEngine {
           let ab = null;
           if (roomMeta.download_url) {
             const payloadRes = await fetch(roomMeta.download_url);
-            if (payloadRes.ok) ab = await payloadRes.arrayBuffer();
+            if (payloadRes.ok) ab = await this._readDownload(payloadRes, onProgress, onStatus);
           } else {
             const payloadRes = await fetch(`${this.apiBase}/api/relay/payload/${encodeURIComponent(code)}`);
-            if (payloadRes.ok) ab = await payloadRes.arrayBuffer();
+            if (payloadRes.ok) ab = await this._readDownload(payloadRes, onProgress, onStatus);
           }
           if (ab) {
             payloadPackage = {
@@ -452,24 +452,7 @@ class JynxTransferEngine {
     // Decrypt and unpack
     const encryptedBytes = this._base64ToUint8Array(payloadPackage.data);
     const totalBytes = encryptedBytes.byteLength;
-    const chunkSize = 64 * 1024;
-    let transferred = 0;
-    const startTime = performance.now();
-
-    onStatus?.(`Downloading encrypted stream (${JynxTools.formatBytes(totalBytes)})...`, "transferring");
-
-    while (transferred < totalBytes) {
-      const step = Math.min(chunkSize * 2, totalBytes - transferred);
-      transferred += step;
-      const elapsedSec = (performance.now() - startTime) / 1000;
-      const speed = elapsedSec > 0 ? transferred / elapsedSec : 0;
-      const percent = Math.min(100, Math.round((transferred / totalBytes) * 100));
-      const remainingBytes = totalBytes - transferred;
-      const eta = speed > 0 ? remainingBytes / speed : 0;
-
-      onProgress?.({ transferred, totalBytes, percent, speed, eta, elapsedSec });
-      await new Promise(r => setTimeout(r, 20));
-    }
+    onProgress?.({ transferred: totalBytes, totalBytes, percent: 100, speed: 0, eta: 0, elapsedSec: 0 });
 
     onStatus?.("Decrypting AES-256-GCM payload in browser...", "decrypting");
     await new Promise(r => setTimeout(r, 100));
@@ -479,6 +462,33 @@ class JynxTransferEngine {
       decryptedBuffer = await window.jynxCrypto.decrypt(encryptedBytes, code);
     } catch (err) {
       throw new Error("Decryption failed: Incorrect code phrase or corrupted payload.");
+    }
+
+    async _readDownload(response, onProgress, onStatus) {
+      const totalBytes = Number(response.headers.get("content-length")) || 0;
+      if (!response.body) return response.arrayBuffer();
+      const reader = response.body.getReader();
+      const chunks = [];
+      let transferred = 0;
+      const startedAt = performance.now();
+      onStatus?.(`Downloading encrypted stream${totalBytes ? ` (${JynxTools.formatBytes(totalBytes)})` : ""}...`, "transferring");
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        transferred += value.byteLength;
+        const elapsedSec = (performance.now() - startedAt) / 1000;
+        const speed = elapsedSec > 0 ? transferred / elapsedSec : 0;
+        const percent = totalBytes ? Math.min(100, Math.round((transferred / totalBytes) * 100)) : 0;
+        onProgress?.({ transferred, totalBytes, percent, speed, eta: speed && totalBytes ? Math.max(0, (totalBytes - transferred) / speed) : 0, elapsedSec });
+      }
+      const result = new Uint8Array(transferred);
+      let offset = 0;
+      for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return result.buffer;
     }
 
     const manifest = payloadPackage.manifest;

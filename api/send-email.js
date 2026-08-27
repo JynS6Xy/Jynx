@@ -24,7 +24,8 @@ export default async function handler(req, res) {
     const port = smtp_config?.port || process.env.SMTP_PORT || 587;
     const user = smtp_config?.user || process.env.SMTP_USER || "";
     const pass = smtp_config?.pass || process.env.SMTP_PASS || "";
-    const from = process.env.SMTP_FROM || user;
+    const fromAddress = process.env.SMTP_FROM || user;
+    const fromName = process.env.SMTP_FROM_NAME || "Jynx";
 
     if (!user || !pass) {
       return res.status(400).json({
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
       ? `${manifest.filesCount || 1} encrypted file(s)`
       : "Encrypted confidential message";
     await transporter.sendMail({
-      from,
+      from: { name: fromName, address: fromAddress },
       to: to_email,
       subject: `Jynx Transfer Ready: [${code}]`,
       text: [
