@@ -305,14 +305,33 @@ class JynxTransferEngine {
     const verification = await window.jynxCrypto.getVerificationDigits(code);
     const useR2 = encryptedData.byteLength > 45 * 1024 * 1024;
     let payloadB64 = null;
+    const resetUploadProgress = () => onProgress?.({
+      transferred: 0,
+      totalBytes: encryptedData.byteLength,
+      percent: 0,
+      speed: 0,
+      eta: 0,
+      elapsedSec: 0
+    });
 
     if (useR2) {
       const direct = await this._tryDirectSend(code, encryptedData, manifest, verification, onProgress, onStatus);
-      if (!direct) {
+      if (direct) {
+        onProgress?.({
+          transferred: encryptedData.byteLength,
+          totalBytes: encryptedData.byteLength,
+          percent: 100,
+          speed: 0,
+          eta: 0,
+          elapsedSec: 0
+        });
+      } else {
+        resetUploadProgress();
         onStatus?.("Direct transfer unavailable. Using Cloudflare R2 relay...", "uploading");
         await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
       }
     } else {
+      resetUploadProgress();
       payloadB64 = this._uint8ArrayToBase64(encryptedData);
     }
 
