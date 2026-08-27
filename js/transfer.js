@@ -438,7 +438,16 @@ class JynxTransferEngine {
       }
 
       if (!payloadPackage && attempt < maxAttempts) {
-        onStatus?.(`Searching for sender room "${code}" on relay... (Attempt ${attempt}/${maxAttempts})`, "handshake");
+        const remaining = maxAttempts - attempt;
+        onStatus?.(`Waiting for sender... ${remaining}s remaining`, "handshake");
+        onProgress?.({
+          transferred: attempt,
+          totalBytes: maxAttempts,
+          percent: Math.round((attempt / maxAttempts) * 100),
+          speed: 0,
+          eta: remaining,
+          elapsedSec: attempt
+        });
         await new Promise(r => setTimeout(r, 1000));
       }
     }

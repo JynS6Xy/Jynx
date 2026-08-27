@@ -541,9 +541,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const shareUrl = document.getElementById("direct-share-input")?.value;
         if (!shareUrl) return;
         if (navigator.share) {
-          await navigator.share({ title: "Jynx transfer", text: `Open this Jynx transfer: ${shareUrl}`, url: shareUrl });
+          try {
+            await navigator.share({ title: "Jynx transfer", text: `Open this Jynx transfer: ${shareUrl}`, url: shareUrl });
+          } catch (err) {
+            if (err.name !== "AbortError") throw err;
+          }
         } else {
-          await navigator.clipboard.writeText(shareUrl);
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+          } catch (err) {
+            const input = document.getElementById("direct-share-input");
+            input?.select();
+            document.execCommand("copy");
+          }
           shareQrBtn.textContent = "LINK COPIED";
           setTimeout(() => { shareQrBtn.textContent = "SHARE QR / LINK"; }, 2000);
         }
