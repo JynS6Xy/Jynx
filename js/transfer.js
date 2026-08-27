@@ -411,7 +411,8 @@ class JynxTransferEngine {
               (loaded) => {
                 uploadedBytes[index] = loaded;
                 reportUploadProgress();
-              }
+              },
+              (attempt) => onStatus?.(`Uploading part ${index + 1} of ${upload.urls.length} (retry ${attempt})...`, "uploading")
             );
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             uploadedBytes[index] = end - start;
@@ -459,22 +460,36 @@ class JynxTransferEngine {
     }
   }
 
-  _uploadR2Part(url, body, onProgress) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", url);
-      xhr.timeout = 180000;
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) onProgress(event.loaded);
-      };
-      xhr.onload = () => resolve(new Response("", {
-        status: xhr.status,
-        headers: { ETag: xhr.getResponseHeader("ETag") || "" }
-      }));
-      xhr.onerror = () => reject(new Error("network or CORS error"));
-      xhr.ontimeout = () => reject(new Error("upload timed out"));
-      xhr.send(body);
-    });
+  async _uploadR2Part(url, body, onProgress, onRetry, attempts = 3) {
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const response = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", url);
+          xhr.timeout = 180000;
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) onProgress(event.loaded);
+          };
+          xhr.onload = () => resolve(new Response("", {
+            status: xhr.status,
+            headers: { ETag: xhr.getResponseHeader("ETag") || "" }
+          }));
+          xhr.onerror = () => reject(new Error("network or CORS error"));
+          xhr.ontimeout = () => reject(new Error("upload timed out"));
+          xhr.send(body);
+        });
+        if (response.ok || (response.status >= 400 && response.status < 500)) return response;
+        throw new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts) {
+          onRetry?.(attempt + 1);
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        }
+      }
+    }
+    throw new Error(`${lastError?.message || "upload failed"} after ${attempts} attempts. Verify R2 CORS allows PUT from ${window.location.origin}.`);
   }
 
   async startReceive({ code, onProgress, onStatus }) {
