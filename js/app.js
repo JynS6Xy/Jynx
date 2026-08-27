@@ -996,7 +996,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res.ok) {
         const stats = await res.json();
         if (badge) {
-          badge.innerHTML = `<span class="status-indicator"></span> <span>DATABASE RELAY: ONLINE (SQLite &bull; ${stats.active_rooms} active room${stats.active_rooms === 1 ? '' : 's'})</span>`;
+          const database = stats.database || "Connected relay";
+          badge.innerHTML = `<span class="status-indicator"></span> <span>DATABASE RELAY: ONLINE (${escapeHtml(database)} &bull; ${stats.active_rooms} active room${stats.active_rooms === 1 ? '' : 's'})</span>`;
           badge.style.color = "var(--accent)";
         }
       }
