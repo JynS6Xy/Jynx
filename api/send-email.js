@@ -38,14 +38,15 @@ export default async function handler(req, res) {
       });
     }
 
-    const host = smtp_config?.host || process.env.SMTP_HOST || "smtp.gmail.com";
-    const port = smtp_config?.port || process.env.SMTP_PORT || 587;
-    const user = smtp_config?.user || process.env.SMTP_USER || "";
-    const pass = smtp_config?.pass || process.env.SMTP_PASS || "";
-    const fromAddress = process.env.SMTP_FROM || user;
+    const host = String(smtp_config?.host || process.env.SMTP_HOST || "smtp.gmail.com").trim();
+    const port = Number(smtp_config?.port || process.env.SMTP_PORT || 587);
+    const user = String(smtp_config?.user || process.env.SMTP_USER || "").trim();
+    const pass = String(smtp_config?.pass || process.env.SMTP_PASS || "").replace(/\s/g, "");
+    const configuredFrom = String(process.env.SMTP_FROM || "").trim();
+    const fromAddress = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuredFrom) ? configuredFrom : user;
     const fromName = process.env.SMTP_FROM_NAME || "Jynx";
 
-    if (!user || !pass) {
+    if (!user || !pass || !Number.isInteger(port) || port < 1 || port > 65535) {
       return res.status(400).json({
         error: "SMTP credentials not configured. Please enter your Gmail address and 16-character App Password in Settings or environment variables."
       });
@@ -53,9 +54,12 @@ export default async function handler(req, res) {
 
     const transporter = nodemailer.createTransport({
       host,
-      port: Number(port),
-      secure: Number(port) === 465,
-      auth: { user, pass }
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 30000
     });
     const fileDescription = manifest?.type === "files"
       ? `${manifest.filesCount || 1} encrypted file(s)`

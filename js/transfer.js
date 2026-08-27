@@ -294,7 +294,7 @@ class JynxTransferEngine {
 
         const emailData = await emailRes.json().catch(() => ({}));
         if (!emailRes.ok || emailData.error) {
-          throw new Error(emailData.error || `HTTP ${emailRes.status}`);
+          throw new Error(emailData.error || `Email service returned HTTP ${emailRes.status}`);
         }
 
         emailStatus = { success: true, recipient: receiverEmail, data: emailData };
