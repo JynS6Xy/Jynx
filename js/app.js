@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentCode = "";
   let isSending = false;
   let isReceiving = false;
+  let lastSentFileSignature = "";
 
   // Initialize theme
   initTheme();
@@ -621,6 +622,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const payloadText = textInput ? textInput.value : "";
     const receiverEmailInput = document.getElementById("receiver-email-input");
     const receiverEmail = receiverEmailInput ? receiverEmailInput.value.trim() : "";
+    const fileSignature = (currentSendMode === "files" || currentSendMode === "vault")
+      ? selectedFiles.map(file => `${file.name}\u0000${file.size}\u0000${file.lastModified}`).join("\u0001")
+      : "";
+
+    if (fileSignature && fileSignature === lastSentFileSignature) {
+      const warning = "This file was already sent. Choose or change the file before sending again.";
+      if (sendStatus) {
+        sendStatus.textContent = warning;
+        sendStatus.className = "status-message warning";
+      }
+      window.jynxSettings?.playSound("error");
+      isSending = false;
+      sendBtn.disabled = false;
+      updateSendButtonState();
+      return;
+    }
 
     try {
       const result = await window.jynxTransferEngine.startSend({
@@ -694,6 +711,7 @@ document.addEventListener("DOMContentLoaded", () => {
         progressBar.style.width = "100%";
         progressBar.classList.remove("upload-active");
       }
+      if (fileSignature) lastSentFileSignature = fileSignature;
     } catch (err) {
       window.jynxSettings?.playSound("error");
       if (sendStatus) {

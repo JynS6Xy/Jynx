@@ -616,8 +616,9 @@ button:disabled, input:disabled {
   position: absolute;
   inset: auto 0 0;
   width: 35%;
-  height: 3px;
-  background: var(--accent);
+  height: 4px;
+  background: #39ff6a;
+  box-shadow: 0 0 10px rgba(57, 255, 106, 0.9);
   animation: jynx-progress 1.2s ease-in-out infinite;
 }
 
@@ -695,7 +696,8 @@ button:disabled, input:disabled {
 }
 
 #send-progress-block .progress-track span {
-  background: #fff;
+  background: #39ff6a;
+  box-shadow: 0 0 8px rgba(57, 255, 106, 0.75);
 }
 
 #send-progress-block .progress-track span.upload-active {
@@ -708,7 +710,7 @@ button:disabled, input:disabled {
   position: absolute;
   inset: 0;
   width: 45%;
-  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
   animation: jynx-upload-shimmer 1s linear infinite;
 }
 
