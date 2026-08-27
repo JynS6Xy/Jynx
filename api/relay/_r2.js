@@ -31,7 +31,8 @@ export const r2 = r2Configured
   ? new S3Client({
       region: "auto",
       endpoint,
-      credentials: {
+    forcePathStyle: true,
+    credentials: {
         accessKeyId,
         secretAccessKey
       }

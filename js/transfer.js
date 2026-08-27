@@ -346,6 +346,9 @@ class JynxTransferEngine {
           const index = nextPart++;
           const start = index * upload.partSize;
           const end = Math.min(start + upload.partSize, payloadBlob.size);
+          if (!upload.urls[index] || !/^https:\/\//i.test(upload.urls[index])) {
+            throw new Error(`R2 returned an invalid signed URL for part ${index + 1}.`);
+          }
           let response;
           try {
             response = await fetch(upload.urls[index], {
@@ -355,7 +358,7 @@ class JynxTransferEngine {
             });
           } catch (err) {
             throw new Error(
-              `R2 part ${index + 1} could not be reached. Check bucket CORS allows PUT from ${window.location.origin}.`
+              `R2 part ${index + 1} could not be reached from ${window.location.origin}. Check R2 CORS allows PUT from this exact origin and that the R2 endpoint is reachable.`
             );
           }
           if (!response.ok) throw new Error(`R2 upload failed at part ${index + 1} (HTTP ${response.status}).`);
