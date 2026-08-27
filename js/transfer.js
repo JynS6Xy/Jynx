@@ -244,7 +244,7 @@ class JynxTransferEngine {
       }
     } catch (e) {}
 
-    onStatus?.("Upload complete. Finalizing...", "staged");
+    onStatus?.("Upload complete.", "staged");
 
     // 4. Publish to Global MQTT Cloud Relay
     if (payloadB64) await this._publishToMqttCloud(code, payloadPackage);
