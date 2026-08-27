@@ -691,6 +691,11 @@ button:disabled, input:disabled {
   background: var(--foreground);
   height: 100%;
   transition: width 0.1s linear;
+}
+
+.progress-track span.indeterminate {
+  width: 35% !important;
+  animation: jynx-progress 1.2s ease-in-out infinite;
   display: block;
 }
 

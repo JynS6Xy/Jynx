@@ -748,10 +748,18 @@ document.addEventListener("DOMContentLoaded", () => {
               const percentEl = progressBlock.querySelector(".progress-percent");
               const transferredEl = progressBlock.querySelector(".progress-transferred");
 
-              if (bar) bar.style.width = `${prog.percent}%`;
-              if (percentEl) percentEl.textContent = `${prog.percent}%`;
-              if (speedEl) speedEl.textContent = JynxTools.formatSpeed(prog.speed);
-              if (transferredEl) transferredEl.textContent = `${JynxTools.formatBytes(prog.transferred)} / ${JynxTools.formatBytes(prog.totalBytes)}`;
+              if (prog.waiting) {
+                if (bar) bar.classList.add("indeterminate");
+                if (percentEl) percentEl.textContent = "WAITING";
+                if (speedEl) speedEl.textContent = "—";
+                if (transferredEl) transferredEl.textContent = "Waiting for sender";
+              } else {
+                if (bar) bar.classList.remove("indeterminate");
+                if (bar) bar.style.width = `${prog.percent}%`;
+                if (percentEl) percentEl.textContent = `${prog.percent}%`;
+                if (speedEl) speedEl.textContent = JynxTools.formatSpeed(prog.speed);
+                if (transferredEl) transferredEl.textContent = `${JynxTools.formatBytes(prog.transferred)} / ${JynxTools.formatBytes(prog.totalBytes)}`;
+              }
             }
           }
         });

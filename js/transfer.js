@@ -240,9 +240,15 @@ class JynxTransferEngine {
       });
       if (res.ok) {
         serverlessOk = true;
+        onProgress?.({ transferred: payloadB64.length, totalBytes: payloadB64.length, percent: 100, speed: 0, eta: 0, elapsedSec: 0 });
         console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
+      } else {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.error || `Relay upload failed (HTTP ${res.status}).`);
       }
-    } catch (e) {}
+    } catch (e) {
+      if (!useR2) throw e;
+    }
 
     onStatus?.("Upload complete.", "staged");
 
@@ -449,7 +455,8 @@ class JynxTransferEngine {
           percent: Math.round((attempt / maxAttempts) * 100),
           speed: 0,
           eta: remaining,
-          elapsedSec: attempt
+          elapsedSec: attempt,
+          waiting: true
         });
         await new Promise(r => setTimeout(r, 1000));
       }
