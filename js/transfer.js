@@ -280,6 +280,8 @@ class JynxTransferEngine {
           if (saved) smtpConfig = JSON.parse(saved);
         } catch (e) {}
 
+        const emailController = new AbortController();
+        const emailTimeout = setTimeout(() => emailController.abort(), 45000);
         const emailRes = await fetch(`${this.apiBase}/api/send-email`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -289,8 +291,10 @@ class JynxTransferEngine {
             share_url: shareUrl,
             manifest: manifest,
             smtp_config: smtpConfig
-          })
+          }),
+          signal: emailController.signal
         });
+        clearTimeout(emailTimeout);
 
         const emailData = await emailRes.json().catch(() => ({}));
         if (!emailRes.ok || emailData.error) {
