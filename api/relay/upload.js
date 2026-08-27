@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { code, manifest, verification, payload_b64, mode, ttl, max_downloads } = req.body || {};
+    const { code, manifest, verification, payload_b64, payload_size, mode, ttl, max_downloads } = req.body || {};
     if (!code || !payload_b64) {
       return res.status(400).json({ error: "Missing code or payload" });
     }
@@ -32,6 +32,7 @@ export default async function handler(req, res) {
       manifest: manifest || {},
       verification: verification || "",
       payload_b64: payload_b64,
+      payloadSize: Number(payload_size) || Math.floor(payload_b64.length * 3 / 4),
       mode: mode || "files",
       createdAt: Date.now(),
       expiresAt: Date.now() + ttlSeconds * 1000,

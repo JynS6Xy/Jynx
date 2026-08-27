@@ -231,6 +231,7 @@ class JynxTransferEngine {
           manifest: manifest,
           verification: verification,
           payload_b64: payloadB64,
+          payload_size: encryptedData.byteLength,
           mode: mode,
           ttl: 86400,
           max_downloads: 10
@@ -461,6 +462,9 @@ class JynxTransferEngine {
             if (payloadRes.ok) ab = await this._readDownload(payloadRes, onProgress, onStatus);
           }
           if (ab) {
+            if (roomMeta.payloadSize && ab.byteLength !== roomMeta.payloadSize) {
+              throw new Error(`Incomplete transfer: received ${ab.byteLength} of ${roomMeta.payloadSize} bytes.`);
+            }
             payloadPackage = {
               data: this._uint8ArrayToBase64(new Uint8Array(ab)),
               manifest: roomMeta.manifest,
@@ -517,6 +521,10 @@ class JynxTransferEngine {
     const manifest = payloadPackage.manifest;
     const verification = payloadPackage.verification;
 
+    if (!manifest || typeof manifest !== "object") {
+    throw new Error("Received payload metadata is missing or invalid.");
+    }
+
     if (manifest.type === "text") {
       const decodedText = new TextDecoder().decode(decryptedBuffer);
       return {
@@ -526,8 +534,11 @@ class JynxTransferEngine {
         verification: verification || "VERIFIED"
       };
     } else {
-      if (!manifest || manifest.type !== "files") {
+      if (manifest.type !== "files") {
         throw new Error("Received payload metadata is missing or invalid.");
+      }
+      if (decryptedBuffer.byteLength < 4) {
+        throw new Error("Received file package is corrupted or incomplete.");
       }
       const view = new DataView(decryptedBuffer);
       const manifestLen = view.getUint32(0, true);
@@ -535,12 +546,25 @@ class JynxTransferEngine {
         throw new Error("Received file package is corrupted or incomplete.");
       }
       const manifestBytes = new Uint8Array(decryptedBuffer, 4, manifestLen);
-      const manifestJson = JSON.parse(new TextDecoder().decode(manifestBytes));
+      let manifestJson;
+      try {
+        manifestJson = JSON.parse(new TextDecoder().decode(manifestBytes));
+      } catch {
+        throw new Error("Received file manifest is corrupted.");
+      }
+      if (!Array.isArray(manifestJson.files)) {
+        throw new Error("Received file manifest is invalid.");
+      }
 
       const filesData = [];
       const payloadStart = 4 + manifestLen;
 
       for (const fMeta of manifestJson.files) {
+        if (!fMeta || !Number.isSafeInteger(fMeta.offset) || !Number.isSafeInteger(fMeta.size) ||
+            fMeta.offset < 0 || fMeta.size < 0 ||
+            payloadStart + fMeta.offset + fMeta.size > decryptedBuffer.byteLength) {
+          throw new Error("Received file data is corrupted or incomplete.");
+        }
         const fileBytes = new Uint8Array(decryptedBuffer, payloadStart + fMeta.offset, fMeta.size);
         const blob = new Blob([fileBytes], { type: fMeta.type });
         filesData.push({
@@ -563,7 +587,18 @@ class JynxTransferEngine {
 
   async _readDownload(response, onProgress, onStatus) {
     const totalBytes = Number(response.headers.get("content-length")) || 0;
-    if (!response.body) return response.arrayBuffer();
+    if (!response.body) {
+      const buffer = await response.arrayBuffer();
+      onProgress?.({
+        transferred: buffer.byteLength,
+        totalBytes: buffer.byteLength,
+        percent: 100,
+        speed: 0,
+        eta: 0,
+        elapsedSec: 0
+      });
+      return buffer;
+    }
     const reader = response.body.getReader();
     const chunks = [];
     let transferred = 0;
@@ -585,6 +620,14 @@ class JynxTransferEngine {
       result.set(chunk, offset);
       offset += chunk.byteLength;
     }
+    onProgress?.({
+      transferred,
+      totalBytes: totalBytes || transferred,
+      percent: 100,
+      speed: transferred / Math.max((performance.now() - startedAt) / 1000, 0.001),
+      eta: 0,
+      elapsedSec: (performance.now() - startedAt) / 1000
+    });
     return result.buffer;
   }
 

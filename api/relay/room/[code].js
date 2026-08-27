@@ -27,6 +27,7 @@ export default async function handler(req, res) {
     code: room.code,
     manifest: room.manifest,
     verification: room.verification,
+    payloadSize: room.payloadSize,
     mode: room.mode,
     createdAt: room.createdAt,
     expiresAt: room.expiresAt

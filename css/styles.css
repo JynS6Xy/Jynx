@@ -688,9 +688,10 @@ button:disabled, input:disabled {
 }
 
 .progress-track span {
-  background: var(--foreground);
+  background: var(--accent);
   height: 100%;
   transition: width 0.1s linear;
+  display: block;
 }
 
 .progress-track span.indeterminate {

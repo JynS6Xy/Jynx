@@ -49,6 +49,7 @@ export default async function handler(req, res) {
       const ttl = Math.min(Number(body.ttl) || 86400, 86400 * 7);
       await redis.set(roomKey(code), {
         code, manifest: body.manifest || {}, verification: body.verification || "",
+        payloadSize: size,
         mode: body.mode || "files", objectKey: key, uploadId: created.UploadId,
         r2Status: "uploading", createdAt: Date.now(), expiresAt: Date.now() + ttl * 1000,
         downloads: 0, max_downloads: body.max_downloads || 10
