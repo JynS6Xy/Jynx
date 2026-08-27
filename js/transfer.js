@@ -242,18 +242,20 @@ class JynxTransferEngine {
         serverlessOk = true;
         onProgress?.({ transferred: payloadB64.length, totalBytes: payloadB64.length, percent: 100, speed: 0, eta: 0, elapsedSec: 0 });
         console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
-      } else {
-        const detail = await res.json().catch(() => ({}));
-        throw new Error(detail.error || `Relay upload failed (HTTP ${res.status}).`);
       }
     } catch (e) {
-      if (!useR2) throw e;
+      console.warn("[JYNX RELAY] REST upload unavailable; using MQTT fallback for this transfer.", e);
     }
 
     onStatus?.("Upload complete.", "staged");
 
     // 4. Publish to Global MQTT Cloud Relay
-    if (payloadB64) await this._publishToMqttCloud(code, payloadPackage);
+    if (payloadB64) {
+      const mqttPublished = await this._publishToMqttCloud(code, payloadPackage);
+      if (!serverlessOk && !mqttPublished) {
+        throw new Error("Transfer relay unavailable. Please retry when the relay is online.");
+      }
+    }
 
     // 5. Broadcast to local tabs
     if (this.channel) {
