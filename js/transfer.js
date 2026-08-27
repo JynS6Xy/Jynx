@@ -234,7 +234,7 @@ class JynxTransferEngine {
     }
   }
 
-  async startSend({ code, mode, transport = "relay", files, text, receiverEmail, onProgress, onStatus }) {
+  async startSend({ code, mode, files, text, receiverEmail, onProgress, onStatus }) {
     code = code.trim().toLowerCase();
     onStatus?.("Encrypting payload in browser with AES-256-GCM...", "encrypting");
 
@@ -314,28 +314,7 @@ class JynxTransferEngine {
       elapsedSec: 0
     });
 
-    if (transport === "nearby") {
-      const direct = await this._tryDirectSend(code, encryptedData, manifest, verification, onProgress, onStatus);
-      if (direct) {
-        onProgress?.({
-          transferred: encryptedData.byteLength,
-          totalBytes: encryptedData.byteLength,
-          percent: 100,
-          speed: 0,
-          eta: 0,
-          elapsedSec: 0
-        });
-      } else {
-        resetUploadProgress();
-        if (useR2) {
-          onStatus?.("Direct transfer unavailable. Using Cloudflare R2 relay...", "uploading");
-          await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
-        } else {
-          onStatus?.("Direct transfer unavailable. Using secure relay...", "uploading");
-          payloadB64 = this._uint8ArrayToBase64(encryptedData);
-        }
-      }
-    } else if (useR2) {
+    if (useR2) {
       onStatus?.("Uploading encrypted data to Cloudflare R2...", "uploading");
       await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
     } else {
@@ -363,10 +342,13 @@ class JynxTransferEngine {
     onStatus?.("Staging encrypted payload locally...", "staging");
 
     // 3. Upload to Vercel Serverless Relay
-    onStatus?.("Uploading to Cloud Relay...", "uploading");
+    if (!useR2) onStatus?.("Uploading encrypted data to Cloud Relay...", "uploading");
     let serverlessOk = useR2;
     try {
-      if (useR2) throw new Error("R2 upload already completed");
+      if (useR2) {
+        onStatus?.("Cloudflare R2 upload confirmed. Publishing transfer room...", "staged");
+        throw new Error("R2 upload already completed");
+      }
       const uploadBody = JSON.stringify({
           code: code,
           manifest: manifest,

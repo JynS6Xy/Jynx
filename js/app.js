@@ -122,7 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
    * CODE GENERATION & SHARING (AUTO-GENERATED FOR FILE)
    * ---------------------------------------------------- */
   function updateIntendedFileCode() {
-    if (currentSendMode === "files" || currentSendMode === "nearby" || currentSendMode === "vault") {
+    if (currentSendMode === "files" || currentSendMode === "vault") {
       currentCode = JynxTools.generateFileCodePhrase(selectedFiles, currentSendMode, "");
     } else {
       const textInput = document.getElementById("secret-text-input");
@@ -351,7 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.classList.add("active");
         currentSendMode = btn.dataset.mode;
 
-        if (currentSendMode === "files" || currentSendMode === "nearby") {
+        if (currentSendMode === "files") {
           dropZone.style.display = "";
           textComposer.style.display = "none";
           if (vaultNote) vaultNote.style.display = "none";
@@ -584,7 +584,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const sendBtn = document.getElementById("start-send-btn");
     if (!sendBtn) return;
 
-    if (currentSendMode === "files" || currentSendMode === "nearby" || currentSendMode === "vault") {
+    if (currentSendMode === "files" || currentSendMode === "vault") {
       sendBtn.disabled = selectedFiles.length === 0;
       sendBtn.textContent = selectedFiles.length > 0 
         ? `SEND ${selectedFiles.length} FILE${selectedFiles.length > 1 ? "S" : ""} NOW`
@@ -622,7 +622,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const payloadText = textInput ? textInput.value : "";
     const receiverEmailInput = document.getElementById("receiver-email-input");
     const receiverEmail = receiverEmailInput ? receiverEmailInput.value.trim() : "";
-    const fileSignature = (currentSendMode === "files" || currentSendMode === "nearby" || currentSendMode === "vault")
+    const fileSignature = (currentSendMode === "files" || currentSendMode === "vault")
       ? selectedFiles.map(file => `${file.name}\u0000${file.size}\u0000${file.lastModified}`).join("\u0001")
       : "";
 
@@ -643,7 +643,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await window.jynxTransferEngine.startSend({
         code: currentCode,
         mode: currentSendMode,
-        transport: currentSendMode === "nearby" ? "nearby" : "relay",
         files: selectedFiles,
         text: payloadText,
         receiverEmail: receiverEmail,
