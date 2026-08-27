@@ -303,35 +303,6 @@ class JynxTransferEngine {
         emailStatus = { success: false, recipient: receiverEmail, error: e.message };
       }
 
-      _uploadJsonWithProgress(url, body, onProgress) {
-        return new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          const startedAt = performance.now();
-          xhr.open("POST", url);
-          xhr.setRequestHeader("Content-Type", "application/json");
-          xhr.upload.onprogress = (event) => {
-            if (!event.lengthComputable) return;
-            const elapsedSec = (performance.now() - startedAt) / 1000;
-            const speed = elapsedSec > 0 ? event.loaded / elapsedSec : 0;
-            onProgress?.({
-              transferred: event.loaded,
-              totalBytes: event.total,
-              percent: Math.round((event.loaded / event.total) * 100),
-              speed,
-              eta: speed > 0 ? (event.total - event.loaded) / speed : 0,
-              elapsedSec
-            });
-          };
-          xhr.onload = () => resolve(new Response(xhr.responseText, {
-            status: xhr.status,
-            headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "application/json" }
-          }));
-          xhr.onerror = () => reject(new Error("Cloud relay upload could not be reached."));
-          xhr.ontimeout = () => reject(new Error("Cloud relay upload timed out."));
-          xhr.timeout = 120000;
-          xhr.send(body);
-        });
-      }
     }
 
     onStatus?.(`Ready on Global Relay! Share code: ${code} (Verification: ${verification})`, "ready");
@@ -343,6 +314,33 @@ class JynxTransferEngine {
       totalSize: encryptedData.byteLength,
       emailStatus
     };
+  }
+
+  _uploadJsonWithProgress(url, body, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const startedAt = performance.now();
+      xhr.open("POST", url);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const elapsedSec = (performance.now() - startedAt) / 1000;
+        const speed = elapsedSec > 0 ? event.loaded / elapsedSec : 0;
+        onProgress?.({
+          transferred: event.loaded, totalBytes: event.total,
+          percent: Math.round((event.loaded / event.total) * 100), speed,
+          eta: speed > 0 ? (event.total - event.loaded) / speed : 0, elapsedSec
+        });
+      };
+      xhr.onload = () => resolve(new Response(xhr.responseText, {
+        status: xhr.status,
+        headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "application/json" }
+      }));
+      xhr.onerror = () => reject(new Error("Cloud relay upload could not be reached."));
+      xhr.ontimeout = () => reject(new Error("Cloud relay upload timed out."));
+      xhr.timeout = 120000;
+      xhr.send(body);
+    });
   }
 
   getGmailComposeUrl({ to_email = "", code = "", share_url = "", manifest = {} }) {
