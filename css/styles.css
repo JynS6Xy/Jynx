@@ -549,6 +549,14 @@ input {
   font-size: 10.5px;
 }
 
+.qr-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 /* Primary / Secondary Buttons */
 .primary-button, .secondary-button {
   border: 1px solid var(--foreground);
@@ -1516,4 +1524,3 @@ details[open] summary {
 .text-link-btn:hover {
   opacity: 0.8;
 }
-

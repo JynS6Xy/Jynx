@@ -278,6 +278,10 @@
         <div id="share-qr-wrapper" class="share-qr-region" style="display: none;">
           <div id="share-qr-svg" class="share-qr-code"></div>
           <p>Scan with your mobile camera to receive files instantly</p>
+          <div class="qr-actions">
+            <button type="button" id="download-qr-btn" class="secondary-button">DOWNLOAD QR</button>
+            <button type="button" id="share-qr-btn" class="secondary-button">SHARE QR / LINK</button>
+          </div>
         </div>
 
         <!-- Live Sending Progress & Status -->
@@ -389,6 +393,7 @@
   <!-- Global Cloud Relay & P2P Engine -->
   <script src="https://unpkg.com/mqtt@5.6.1/dist/mqtt.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 
   <!-- Application Scripts with Cache Busting -->
   <script src="js/crypto.js?v=2.1.0"></script>

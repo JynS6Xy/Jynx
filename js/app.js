@@ -513,12 +513,40 @@ document.addEventListener("DOMContentLoaded", () => {
     // QR Code toggle modal
     const qrToggleBtn = document.getElementById("qr-toggle-btn");
     const qrRegion = document.getElementById("share-qr-wrapper");
+    const downloadQrBtn = document.getElementById("download-qr-btn");
+    const shareQrBtn = document.getElementById("share-qr-btn");
     if (qrToggleBtn && qrRegion) {
       qrToggleBtn.addEventListener("click", () => {
         const isHidden = qrRegion.style.display === "none" || !qrRegion.style.display;
         qrRegion.style.display = isHidden ? "grid" : "none";
         qrToggleBtn.textContent = isHidden ? "HIDE QR CODE" : "SHOW QR CODE";
         window.jynxSettings?.playSound("click");
+      });
+    }
+    if (downloadQrBtn) {
+      downloadQrBtn.addEventListener("click", () => {
+        const svg = document.querySelector("#share-qr-svg svg");
+        if (!svg) return;
+        const blob = new Blob([svg.outerHTML], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `jynx-${currentCode}.svg`;
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+    if (shareQrBtn) {
+      shareQrBtn.addEventListener("click", async () => {
+        const shareUrl = document.getElementById("direct-share-input")?.value;
+        if (!shareUrl) return;
+        if (navigator.share) {
+          await navigator.share({ title: "Jynx transfer", text: `Open this Jynx transfer: ${shareUrl}`, url: shareUrl });
+        } else {
+          await navigator.clipboard.writeText(shareUrl);
+          shareQrBtn.textContent = "LINK COPIED";
+          setTimeout(() => { shareQrBtn.textContent = "SHARE QR / LINK"; }, 2000);
+        }
       });
     }
 
