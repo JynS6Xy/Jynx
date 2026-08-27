@@ -694,6 +694,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </a>
               </div>
             `;
+            window.jynxSettings?.playSound("error");
           }
         }
 

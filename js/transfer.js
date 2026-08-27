@@ -241,15 +241,16 @@ class JynxTransferEngine {
         uploadBody,
         onProgress
       );
-      if (res.ok) {
+      const relayData = await res.json().catch(() => ({}));
+      if (res.ok && relayData.status === "STORED") {
         serverlessOk = true;
         console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
+      } else if (res.ok) {
+        throw new Error("Relay returned an unconfirmed upload response.");
       }
     } catch (e) {
       console.warn("[JYNX RELAY] REST upload unavailable; using MQTT fallback for this transfer.", e);
     }
-
-    onStatus?.("Upload complete.", "staged");
 
     // 4. Publish to Global MQTT Cloud Relay
     if (payloadB64) {
@@ -258,6 +259,7 @@ class JynxTransferEngine {
         throw new Error("Transfer relay unavailable. Please retry when the relay is online.");
       }
     }
+    onStatus?.("Transfer stored. Preparing notification...", "staged");
 
     // 5. Broadcast to local tabs
     if (this.channel) {
@@ -280,25 +282,41 @@ class JynxTransferEngine {
           if (saved) smtpConfig = JSON.parse(saved);
         } catch (e) {}
 
-        const emailController = new AbortController();
-        const emailTimeout = setTimeout(() => emailController.abort(), 45000);
-        const emailRes = await fetch(`${this.apiBase}/api/send-email`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to_email: receiverEmail,
-            code: code,
-            share_url: shareUrl,
-            manifest: manifest,
-            smtp_config: smtpConfig
-          }),
-          signal: emailController.signal
-        });
-        clearTimeout(emailTimeout);
+        let emailRes;
+        let lastEmailError;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const emailController = new AbortController();
+          const emailTimeout = setTimeout(() => emailController.abort(), 45000);
+          try {
+            emailRes = await fetch(`${this.apiBase}/api/send-email`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to_email: receiverEmail,
+                code: code,
+                share_url: shareUrl,
+                manifest: manifest,
+                smtp_config: smtpConfig
+              }),
+              signal: emailController.signal
+            });
+          } catch (error) {
+            lastEmailError = error;
+          } finally {
+            clearTimeout(emailTimeout);
+          }
+          if (emailRes && emailRes.ok) break;
+          if (attempt < 3) {
+            onStatus?.(`Retrying Gmail notification (${attempt + 1}/3)...`, "emailing");
+            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+          }
+        }
 
-        const emailData = await emailRes.json().catch(() => ({}));
-        if (!emailRes.ok || emailData.error) {
-          throw new Error(emailData.error || `Email service returned HTTP ${emailRes.status}`);
+        const emailData = emailRes
+          ? await emailRes.json().catch(() => ({}))
+          : {};
+        if (!emailRes?.ok || emailData.error) {
+          throw new Error(emailData.error || lastEmailError?.message || "Email service did not respond.");
         }
 
         emailStatus = { success: true, recipient: receiverEmail, data: emailData };
