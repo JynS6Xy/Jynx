@@ -464,33 +464,6 @@ class JynxTransferEngine {
       throw new Error("Decryption failed: Incorrect code phrase or corrupted payload.");
     }
 
-    async _readDownload(response, onProgress, onStatus) {
-      const totalBytes = Number(response.headers.get("content-length")) || 0;
-      if (!response.body) return response.arrayBuffer();
-      const reader = response.body.getReader();
-      const chunks = [];
-      let transferred = 0;
-      const startedAt = performance.now();
-      onStatus?.(`Downloading encrypted stream${totalBytes ? ` (${JynxTools.formatBytes(totalBytes)})` : ""}...`, "transferring");
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        transferred += value.byteLength;
-        const elapsedSec = (performance.now() - startedAt) / 1000;
-        const speed = elapsedSec > 0 ? transferred / elapsedSec : 0;
-        const percent = totalBytes ? Math.min(100, Math.round((transferred / totalBytes) * 100)) : 0;
-        onProgress?.({ transferred, totalBytes, percent, speed, eta: speed && totalBytes ? Math.max(0, (totalBytes - transferred) / speed) : 0, elapsedSec });
-      }
-      const result = new Uint8Array(transferred);
-      let offset = 0;
-      for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return result.buffer;
-    }
-
     const manifest = payloadPackage.manifest;
     const verification = payloadPackage.verification;
 
@@ -530,6 +503,33 @@ class JynxTransferEngine {
         verification: verification || "VERIFIED"
       };
     }
+  }
+
+  async _readDownload(response, onProgress, onStatus) {
+    const totalBytes = Number(response.headers.get("content-length")) || 0;
+    if (!response.body) return response.arrayBuffer();
+    const reader = response.body.getReader();
+    const chunks = [];
+    let transferred = 0;
+    const startedAt = performance.now();
+    onStatus?.(`Downloading encrypted stream${totalBytes ? ` (${JynxTools.formatBytes(totalBytes)})` : ""}...`, "transferring");
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      transferred += value.byteLength;
+      const elapsedSec = (performance.now() - startedAt) / 1000;
+      const speed = elapsedSec > 0 ? transferred / elapsedSec : 0;
+      const percent = totalBytes ? Math.min(100, Math.round((transferred / totalBytes) * 100)) : 0;
+      onProgress?.({ transferred, totalBytes, percent, speed, eta: speed && totalBytes ? Math.max(0, (totalBytes - transferred) / speed) : 0, elapsedSec });
+    }
+    const result = new Uint8Array(transferred);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return result.buffer;
   }
 
   _uint8ArrayToBase64(uint8) {
