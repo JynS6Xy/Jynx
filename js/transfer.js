@@ -190,6 +190,7 @@ class JynxTransferEngine {
 
     // 1. WebCrypto AES-256-GCM Encryption
     onStatus?.("Encrypting payload with AES-256-GCM...", "encrypting");
+    onProgress?.({ transferred: 0, totalBytes: 0, percent: 0, speed: 0, eta: 0, elapsedSec: 0 });
     const encryptedData = await window.jynxCrypto.encrypt(rawBuffer, code);
     const verification = await window.jynxCrypto.getVerificationDigits(code);
     const useR2 = encryptedData.byteLength > 45 * 1024 * 1024;
@@ -225,10 +226,7 @@ class JynxTransferEngine {
     let serverlessOk = useR2;
     try {
       if (useR2) throw new Error("R2 upload already completed");
-      const res = await fetch(`${this.apiBase}/api/relay/upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const uploadBody = JSON.stringify({
           code: code,
           manifest: manifest,
           verification: verification,
@@ -236,11 +234,14 @@ class JynxTransferEngine {
           mode: mode,
           ttl: 86400,
           max_downloads: 10
-        })
       });
+      const res = await this._uploadJsonWithProgress(
+        `${this.apiBase}/api/relay/upload`,
+        uploadBody,
+        onProgress
+      );
       if (res.ok) {
         serverlessOk = true;
-        onProgress?.({ transferred: payloadB64.length, totalBytes: payloadB64.length, percent: 100, speed: 0, eta: 0, elapsedSec: 0 });
         console.log("[JYNX RELAY] Uploaded to Vercel Serverless Relay");
       }
     } catch (e) {
@@ -294,11 +295,42 @@ class JynxTransferEngine {
         if (!emailRes.ok || emailData.error) {
           throw new Error(emailData.error || `HTTP ${emailRes.status}`);
         }
+
         emailStatus = { success: true, recipient: receiverEmail, data: emailData };
         console.log("[JYNX EMAIL] Successfully sent email to", receiverEmail, emailData);
       } catch (e) {
         console.warn("[JYNX EMAIL] Failed to dispatch email notification", e);
         emailStatus = { success: false, recipient: receiverEmail, error: e.message };
+      }
+
+      _uploadJsonWithProgress(url, body, onProgress) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const startedAt = performance.now();
+          xhr.open("POST", url);
+          xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.upload.onprogress = (event) => {
+            if (!event.lengthComputable) return;
+            const elapsedSec = (performance.now() - startedAt) / 1000;
+            const speed = elapsedSec > 0 ? event.loaded / elapsedSec : 0;
+            onProgress?.({
+              transferred: event.loaded,
+              totalBytes: event.total,
+              percent: Math.round((event.loaded / event.total) * 100),
+              speed,
+              eta: speed > 0 ? (event.total - event.loaded) / speed : 0,
+              elapsedSec
+            });
+          };
+          xhr.onload = () => resolve(new Response(xhr.responseText, {
+            status: xhr.status,
+            headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "application/json" }
+          }));
+          xhr.onerror = () => reject(new Error("Cloud relay upload could not be reached."));
+          xhr.ontimeout = () => reject(new Error("Cloud relay upload timed out."));
+          xhr.timeout = 120000;
+          xhr.send(body);
+        });
       }
     }
 
