@@ -600,6 +600,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (bar) {
         bar.style.width = "0%";
         bar.classList.remove("indeterminate");
+        bar.classList.add("upload-active");
       }
     }
     window.jynxSettings?.playSound("connect");
@@ -627,7 +628,10 @@ document.addEventListener("DOMContentLoaded", () => {
             sendProgress.style.display = "block";
             const bar = sendProgress.querySelector(".progress-track span");
             const metrics = sendProgress.querySelector(".progress-speed");
-            if (bar) bar.style.width = `${prog.percent}%`;
+            if (bar) {
+              bar.style.width = `${prog.percent}%`;
+              bar.classList.add("upload-active");
+            }
             if (metrics) metrics.textContent = `${JynxTools.formatSpeed(prog.speed)} • ETA ${JynxTools.formatSeconds(prog.eta)}`;
           }
         }
@@ -674,13 +678,18 @@ document.addEventListener("DOMContentLoaded", () => {
         sendStatus.className = "status-message done";
       }
       const progressBar = sendProgress?.querySelector(".progress-track span");
-      if (progressBar) progressBar.style.width = "100%";
+      if (progressBar) {
+        progressBar.style.width = "100%";
+        progressBar.classList.remove("upload-active");
+      }
     } catch (err) {
       window.jynxSettings?.playSound("error");
       if (sendStatus) {
         sendStatus.textContent = `Error: ${err.message}`;
         sendStatus.className = "status-message error";
       }
+      const progressBar = sendProgress?.querySelector(".progress-track span");
+      if (progressBar) progressBar.classList.remove("upload-active");
     } finally {
       isSending = false;
       sendBtn.disabled = false;

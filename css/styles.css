@@ -698,6 +698,25 @@ button:disabled, input:disabled {
   background: #fff;
 }
 
+#send-progress-block .progress-track span.upload-active {
+  position: relative;
+  overflow: hidden;
+}
+
+#send-progress-block .progress-track span.upload-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.22), transparent);
+  animation: jynx-upload-shimmer 1s linear infinite;
+}
+
+@keyframes jynx-upload-shimmer {
+  from { transform: translateX(-130%); }
+  to { transform: translateX(230%); }
+}
+
 .progress-track span.indeterminate {
   width: 35% !important;
   animation: jynx-progress 1.2s ease-in-out infinite;

@@ -376,6 +376,8 @@ class JynxTransferEngine {
     }
     const payloadBlob = new Blob([encryptedData], { type: "application/octet-stream" });
     const parts = [];
+    const uploadStartedAt = performance.now();
+    onProgress?.({ transferred: 0, totalBytes: payloadBlob.size, percent: 0, speed: 0, eta: 0, elapsedSec: 0 });
     try {
       const concurrency = Math.min(6, upload.urls.length);
       let nextPart = 0;
@@ -407,13 +409,15 @@ class JynxTransferEngine {
           }
           parts[index] = { partNumber: index + 1, etag };
           completedBytes += end - start;
+          const elapsedSec = Math.max((performance.now() - uploadStartedAt) / 1000, 0.001);
+          const speed = completedBytes / elapsedSec;
           onProgress?.({
             transferred: completedBytes,
             totalBytes: payloadBlob.size,
             percent: Math.round((completedBytes / payloadBlob.size) * 100),
-            speed: 0,
-            eta: 0,
-            elapsedSec: 0
+            speed,
+            eta: speed > 0 ? (payloadBlob.size - completedBytes) / speed : 0,
+            elapsedSec
           });
           onStatus?.(`Uploading to Cloudflare R2... ${Math.round((completedBytes / payloadBlob.size) * 100)}%`, "uploading");
         }
