@@ -463,8 +463,7 @@ class JynxTransferEngine {
     const totalBytes = encryptedBytes.byteLength;
     onProgress?.({ transferred: totalBytes, totalBytes, percent: 100, speed: 0, eta: 0, elapsedSec: 0 });
 
-    onStatus?.("Decrypting AES-256-GCM payload in browser...", "decrypting");
-    await new Promise(r => setTimeout(r, 100));
+    onStatus?.(`Decrypting ${JynxTools.formatBytes(totalBytes)} securely in browser...`, "decrypting");
 
     let decryptedBuffer;
     try {
@@ -485,8 +484,14 @@ class JynxTransferEngine {
         verification: verification || "VERIFIED"
       };
     } else {
+      if (!manifest || manifest.type !== "files") {
+        throw new Error("Received payload metadata is missing or invalid.");
+      }
       const view = new DataView(decryptedBuffer);
       const manifestLen = view.getUint32(0, true);
+      if (manifestLen <= 0 || manifestLen > decryptedBuffer.byteLength - 4) {
+        throw new Error("Received file package is corrupted or incomplete.");
+      }
       const manifestBytes = new Uint8Array(decryptedBuffer, 4, manifestLen);
       const manifestJson = JSON.parse(new TextDecoder().decode(manifestBytes));
 

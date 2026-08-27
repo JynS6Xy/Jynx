@@ -765,6 +765,7 @@ document.addEventListener("DOMContentLoaded", () => {
           `;
           statusMsg.className = "status-message done";
         }
+        if (progressBlock) progressBlock.style.display = "none";
 
         // Render Received Content
         if (result.type === "text") {
