@@ -478,7 +478,7 @@ class JynxTransferEngine {
               throw new Error(`Incomplete transfer: received ${ab.byteLength} of ${roomMeta.payloadSize} bytes.`);
             }
             payloadPackage = {
-              data: this._uint8ArrayToBase64(new Uint8Array(ab)),
+              dataBytes: new Uint8Array(ab),
               manifest: roomMeta.manifest,
               verification: roomMeta.verification
             };
@@ -510,14 +510,15 @@ class JynxTransferEngine {
       }
     }
 
-    if (!payloadPackage || !payloadPackage.data) {
+    if (!payloadPackage || (!payloadPackage.data && !payloadPackage.dataBytes)) {
       throw new Error(
         `Room "${code}" not found. Please ensure the sender clicked "SEND ENCRYPTED TEXT" or "SEND FILES" to open the transfer room.`
       );
     }
 
     // Decrypt and unpack
-    const encryptedBytes = this._base64ToUint8Array(payloadPackage.data);
+    const encryptedBytes = payloadPackage.dataBytes ||
+      this._base64ToUint8Array(payloadPackage.data);
     const totalBytes = encryptedBytes.byteLength;
     onProgress?.({ transferred: totalBytes, totalBytes, percent: 100, speed: 0, eta: 0, elapsedSec: 0 });
 
@@ -615,12 +616,18 @@ class JynxTransferEngine {
     const chunks = [];
     let transferred = 0;
     const startedAt = performance.now();
+    let chunksSinceYield = 0;
     onStatus?.(`Downloading encrypted stream${totalBytes ? ` (${JynxTools.formatBytes(totalBytes)})` : ""}...`, "transferring");
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
       transferred += value.byteLength;
+      chunksSinceYield++;
+      if (chunksSinceYield >= 32) {
+        chunksSinceYield = 0;
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
       const elapsedSec = (performance.now() - startedAt) / 1000;
       const speed = elapsedSec > 0 ? transferred / elapsedSec : 0;
       const percent = totalBytes ? Math.min(100, Math.round((transferred / totalBytes) * 100)) : 0;
@@ -631,6 +638,9 @@ class JynxTransferEngine {
     for (const chunk of chunks) {
       result.set(chunk, offset);
       offset += chunk.byteLength;
+      if (offset > 0 && offset % (32 * 1024 * 1024) < chunk.byteLength) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
     onProgress?.({
       transferred,
