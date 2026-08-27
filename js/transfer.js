@@ -96,6 +96,7 @@ class JynxTransferEngine {
           try { client.unsubscribe(topic); client.end(); } catch (e) {}
           resolve(result);
         }
+
       };
 
       const timeout = setTimeout(() => {
@@ -122,6 +123,115 @@ class JynxTransferEngine {
         }
       });
     });
+  }
+
+  async _tryDirectSend(code, encryptedData, manifest, verification, onProgress, onStatus) {
+    if (typeof Peer === "undefined") return false;
+    const peer = new Peer();
+    const client = await this._getMqttClient();
+    if (!client) { peer.destroy(); return false; }
+    try {
+      const peerId = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("signaling timeout")), 6000);
+        peer.on("open", id => { clearTimeout(timer); resolve(id); });
+        peer.on("error", reject);
+      });
+      const topic = `jynx/direct/${code}`;
+      client.publish(topic, JSON.stringify({
+        type: "offer", peerId, size: encryptedData.byteLength, manifest, verification
+      }), { qos: 1, retain: true });
+      onStatus?.("Waiting for direct receiver connection...", "connecting");
+      const connection = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("receiver timeout")), 10000);
+        peer.on("connection", conn => { clearTimeout(timer); resolve(conn); });
+        peer.on("error", reject);
+      });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("channel timeout")), 10000);
+        connection.on("open", () => { clearTimeout(timer); resolve(); });
+        connection.on("error", reject);
+      });
+      connection.send(JSON.stringify({ type: "meta", size: encryptedData.byteLength }));
+      const chunkSize = 1024 * 1024;
+      const startedAt = performance.now();
+      for (let offset = 0; offset < encryptedData.byteLength; offset += chunkSize) {
+        const end = Math.min(offset + chunkSize, encryptedData.byteLength);
+        connection.send(encryptedData.slice(offset, end));
+        const elapsedSec = Math.max((performance.now() - startedAt) / 1000, 0.001);
+        const speed = end / elapsedSec;
+        onProgress?.({ transferred: end, totalBytes: encryptedData.byteLength, percent: Math.min(99, Math.round(end / encryptedData.byteLength * 100)), speed, eta: (encryptedData.byteLength - end) / speed, elapsedSec });
+        while (connection._dc?.bufferedAmount > 16 * 1024 * 1024) await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      connection.send(JSON.stringify({ type: "complete" }));
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 10000);
+        connection.on("data", message => {
+          if (message === "complete-ack") { clearTimeout(timer); resolve(); }
+        });
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      try { client.end(); } catch {}
+      peer.destroy();
+    }
+  }
+
+  async _tryDirectReceive(code, onProgress, onStatus) {
+    if (typeof Peer === "undefined") return null;
+    const client = await this._getMqttClient();
+    if (!client) return null;
+    const peer = new Peer();
+    try {
+      const offer = await new Promise(resolve => {
+        const timer = setTimeout(() => resolve(null), 10000);
+        client.subscribe(`jynx/direct/${code}`, { qos: 1 }, () => {});
+        client.on("message", (topic, message) => {
+          if (topic !== `jynx/direct/${code}`) return;
+          try {
+            const value = JSON.parse(message.toString());
+            if (value.type === "offer") { clearTimeout(timer); resolve(value); }
+          } catch {}
+        });
+      });
+      if (!offer) return null;
+      onStatus?.("Connecting directly to sender...", "connecting");
+      const connection = peer.connect(offer.peerId, { reliable: true, serialization: "binary" });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("direct connection timeout")), 10000);
+        connection.on("open", () => { clearTimeout(timer); resolve(); });
+        connection.on("error", reject);
+      });
+      return await new Promise((resolve, reject) => {
+        const chunks = [];
+        let transferred = 0;
+        connection.on("data", data => {
+          if (typeof data === "string") {
+            const message = JSON.parse(data);
+            if (message.type === "complete") {
+              if (transferred !== offer.size) return reject(new Error("Incomplete direct transfer."));
+              const merged = new Uint8Array(transferred);
+              let offset = 0;
+              for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+              connection.send("complete-ack");
+              return resolve({ dataBytes: merged, manifest: offer.manifest, verification: offer.verification });
+            }
+            return;
+          }
+          const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data.buffer || data);
+          chunks.push(bytes);
+          transferred += bytes.byteLength;
+          onProgress?.({ transferred, totalBytes: offer.size, percent: Math.min(99, Math.round(transferred / offer.size * 100)), speed: 0, eta: 0, elapsedSec: 0 });
+        });
+        connection.on("error", reject);
+      });
+    } catch {
+      return null;
+    } finally {
+      try { client.end(); } catch {}
+      peer.destroy();
+    }
   }
 
   async startSend({ code, mode, files, text, receiverEmail, onProgress, onStatus }) {
@@ -197,7 +307,11 @@ class JynxTransferEngine {
     let payloadB64 = null;
 
     if (useR2) {
-      await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
+      const direct = await this._tryDirectSend(code, encryptedData, manifest, verification, onProgress, onStatus);
+      if (!direct) {
+        onStatus?.("Direct transfer unavailable. Using Cloudflare R2 relay...", "uploading");
+        await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
+      }
     } else {
       payloadB64 = this._uint8ArrayToBase64(encryptedData);
     }
@@ -518,6 +632,7 @@ class JynxTransferEngine {
     onStatus?.(`Connecting to Global Jynx Relay for room "${code}"...`, "connecting");
 
     let payloadPackage = null;
+    payloadPackage = await this._tryDirectReceive(code, onProgress, onStatus);
     const maxAttempts = 30; // Poll for up to 30 seconds if sender is still uploading
     let attempt = 0;
 
