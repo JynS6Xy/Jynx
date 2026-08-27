@@ -1,5 +1,5 @@
 // Vercel Serverless Function: POST /api/send-email
-import { setCorsHeaders } from "./relay/_redis.js";
+import { redis, rateLimitKey, setCorsHeaders } from "./relay/_redis.js";
 import nodemailer from "nodemailer";
 
 export default async function handler(req, res) {
@@ -15,9 +15,27 @@ export default async function handler(req, res) {
 
   try {
     const { to_email, code, share_url, manifest, smtp_config } = req.body || {};
+    const recipient = String(to_email || "").trim().toLowerCase();
+    const clientIp = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown")
+      .split(",")[0].trim().slice(0, 100);
 
-    if (!to_email || !code) {
+    if (!recipient || !code) {
       return res.status(400).json({ error: "Missing recipient email or transfer code" });
+    }
+    if (recipient.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipient)) {
+      return res.status(400).json({ error: "Enter a valid recipient email address." });
+    }
+
+    const [ipCount, recipientCount] = await Promise.all([
+      redis.incr(rateLimitKey("ip", clientIp)),
+      redis.incr(rateLimitKey("recipient", recipient))
+    ]);
+    if (ipCount === 1) await redis.expire(rateLimitKey("ip", clientIp), 600);
+    if (recipientCount === 1) await redis.expire(rateLimitKey("recipient", recipient), 600);
+    if (ipCount > 10 || recipientCount > 3) {
+      return res.status(429).json({
+        error: "Email notification limit reached. Please wait 10 minutes before trying again."
+      });
     }
 
     const host = smtp_config?.host || process.env.SMTP_HOST || "smtp.gmail.com";
@@ -44,7 +62,7 @@ export default async function handler(req, res) {
       : "Encrypted confidential message";
     await transporter.sendMail({
       from: { name: fromName, address: fromAddress },
-      to: to_email,
+      to: recipient,
       subject: `Jynx Transfer Ready: [${code}]`,
       text: [
         "Your encrypted Jynx transfer is ready.",
@@ -54,11 +72,11 @@ export default async function handler(req, res) {
         share_url ? `Open Jynx: ${share_url}` : ""
       ].filter(Boolean).join("\n")
     });
-    console.log(`[JYNX EMAIL] Sent transfer code ${code} to ${to_email} via ${host}:${port}`);
+    console.log(`[JYNX EMAIL] Sent transfer code ${code} to ${recipient} via ${host}:${port}`);
 
     return res.status(200).json({
       status: "SENT",
-      recipient: to_email,
+      recipient,
       code: code,
       dispatch: "SMTP",
       sender: user

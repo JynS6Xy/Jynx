@@ -35,6 +35,20 @@ function createMemoryStore() {
       return rec.value;
     },
 
+    async incr(key) {
+      const current = await this.get(key);
+      const next = (Number(current) || 0) + 1;
+      await this.set(key, next, { ex: 600 });
+      return next;
+    },
+
+    async expire(key, seconds) {
+      const rec = store.get(key);
+      if (!rec) return 0;
+      rec.expiresAt = Date.now() + seconds * 1000;
+      return 1;
+    },
+
     async keys(pattern) {
       if (pattern && typeof pattern === "string") {
         // Support the simple "jynx:room:*" glob used by stats.
@@ -70,6 +84,10 @@ const ROOM_PREFIX = "jynx:room:";
 
 export function roomKey(code) {
   return ROOM_PREFIX + code.trim().toLowerCase();
+}
+
+export function rateLimitKey(scope, value) {
+  return `jynx:rate:${scope}:${value}`;
 }
 
 export function setCorsHeaders(req, res, methods) {

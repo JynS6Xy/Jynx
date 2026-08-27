@@ -402,7 +402,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB (Cloudflare R2 multipart limit)
 
     function handleFilesSelected(files) {
-      const pendingFiles = [...selectedFiles, ...files];
+      const existingKeys = new Set(selectedFiles.map(file =>
+        `${file.name}\u0000${file.size}\u0000${file.lastModified}`
+      ));
+      const uniqueFiles = files.filter(file => {
+        const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+        if (existingKeys.has(key)) return false;
+        existingKeys.add(key);
+        return true;
+      });
+      if (uniqueFiles.length < files.length) {
+        alert("Duplicate files were ignored. Each file can only be added once.");
+      }
+      const pendingFiles = [...selectedFiles, ...uniqueFiles];
       const pendingTotalSize = pendingFiles.reduce((acc, f) => acc + f.size, 0);
 
       if (pendingTotalSize > MAX_FILE_SIZE) {
