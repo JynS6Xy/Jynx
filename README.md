@@ -74,8 +74,9 @@ Transfers larger than 45 MB use browser-to-R2 multipart uploads. Add these Verce
 environment variables: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
 and `R2_BUCKET`. Configure the R2 bucket CORS policy to allow `PUT` and `GET`
 from your Vercel origin, allow the `Content-Type` request header, and expose
-the `ETag` response header. The existing Upstash Redis
-variables remain required for room metadata persistence.
+the `ETag` response header. The existing Upstash Redis variables are required for room metadata persistence;
+the R2 endpoint rejects uploads when Redis is unavailable because serverless
+in-memory storage cannot be shared reliably between sender and receiver instances.
 
 ---
 

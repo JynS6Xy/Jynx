@@ -391,7 +391,7 @@ class JynxTransferEngine {
     onStatus?.(`Connecting to Global Jynx Relay for room "${code}"...`, "connecting");
 
     let payloadPackage = null;
-    const maxAttempts = 15; // Poll for up to 30 seconds if sender is still uploading
+    const maxAttempts = 30; // Poll for up to 30 seconds if sender is still uploading
     let attempt = 0;
 
     while (attempt < maxAttempts && !payloadPackage) {
@@ -439,7 +439,7 @@ class JynxTransferEngine {
 
       if (!payloadPackage && attempt < maxAttempts) {
         onStatus?.(`Searching for sender room "${code}" on relay... (Attempt ${attempt}/${maxAttempts})`, "handshake");
-        await new Promise(r => setTimeout(r, 1800));
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 

@@ -5,7 +5,7 @@ import {
   UploadPartCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { redis, roomKey, setCorsHeaders } from "./_redis.js";
+import { redis, roomKey, setCorsHeaders, usingFallbackStore } from "./_redis.js";
 import { objectKey, r2, r2Bucket, r2Configured, r2ConfigError } from "./_r2.js";
 
 const MAX_SIZE = 1024 * 1024 * 1024;
@@ -16,6 +16,11 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!r2Configured) return res.status(503).json({ error: `Cloudflare R2 configuration error: ${r2ConfigError}` });
+  if (usingFallbackStore) {
+    return res.status(503).json({
+      error: "Persistent room storage is not configured. Add KV_REST_API_URL and KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN) to Vercel."
+    });
+  }
 
   try {
     const body = req.body || {};
