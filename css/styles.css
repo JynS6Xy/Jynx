@@ -690,8 +690,12 @@ button:disabled, input:disabled {
 .progress-track span {
   background: var(--accent);
   height: 100%;
-  transition: width 0.1s linear;
+  transition: width 0.2s ease-out;
   display: block;
+}
+
+#send-progress-block .progress-track span {
+  background: #fff;
 }
 
 .progress-track span.indeterminate {

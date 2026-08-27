@@ -197,7 +197,7 @@ class JynxTransferEngine {
     let payloadB64 = null;
 
     if (useR2) {
-      await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus);
+      await this._uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress);
     } else {
       payloadB64 = this._uint8ArrayToBase64(encryptedData);
     }
@@ -356,7 +356,7 @@ class JynxTransferEngine {
     return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to_email)}&su=${subject}&body=${body}`;
   }
 
-  async _uploadR2(code, encryptedData, manifest, verification, mode, onStatus) {
+  async _uploadR2(code, encryptedData, manifest, verification, mode, onStatus, onProgress) {
     onStatus?.("Preparing Cloudflare R2 multipart upload...", "uploading");
     const initRes = await fetch(`${this.apiBase}/api/relay/r2`, {
       method: "POST",
@@ -407,6 +407,14 @@ class JynxTransferEngine {
           }
           parts[index] = { partNumber: index + 1, etag };
           completedBytes += end - start;
+          onProgress?.({
+            transferred: completedBytes,
+            totalBytes: payloadBlob.size,
+            percent: Math.round((completedBytes / payloadBlob.size) * 100),
+            speed: 0,
+            eta: 0,
+            elapsedSec: 0
+          });
           onStatus?.(`Uploading to Cloudflare R2... ${Math.round((completedBytes / payloadBlob.size) * 100)}%`, "uploading");
         }
       };

@@ -594,6 +594,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     sendBtn.disabled = true;
     sendBtn.classList.add("loading");
+    if (sendProgress) {
+      sendProgress.style.display = "block";
+      const bar = sendProgress.querySelector(".progress-track span");
+      if (bar) {
+        bar.style.width = "0%";
+        bar.classList.remove("indeterminate");
+      }
+    }
     window.jynxSettings?.playSound("connect");
 
     const textInput = document.getElementById("secret-text-input");
@@ -665,6 +673,8 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
         sendStatus.className = "status-message done";
       }
+      const progressBar = sendProgress?.querySelector(".progress-track span");
+      if (progressBar) progressBar.style.width = "100%";
     } catch (err) {
       window.jynxSettings?.playSound("error");
       if (sendStatus) {
